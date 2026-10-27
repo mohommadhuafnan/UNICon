@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import mongoose from 'mongoose';
 
 import { connectDB } from './config/db.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -29,9 +30,6 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Connect to MongoDB
-connectDB();
-
 const app = express();
 
 // Security HTTP headers
@@ -41,42 +39,43 @@ app.use(
   })
 );
 
-// CORS setup
+// Dynamic CORS setup allowing all Vercel deployments and localhost
 const allowedOrigins = [
   process.env.CLIENT_URL || 'http://localhost:5173',
   'http://localhost:3000',
   'http://127.0.0.1:5173',
   'https://unicon-eight.vercel.app',
 ];
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
         callback(null, true);
       } else {
-        callback(null, true); // Permissive for local development & testing
+        callback(null, true); // Permissive in production to ensure client connectivity
       }
     },
     credentials: true,
   })
 );
 
-// Body parser
+// Request body parsers
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Logging
-if (process.env.NODE_ENV !== 'production') {
+// Development request logger
+if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Rate Limiting
+// Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 2000,
+  max: 300,
   message: {
     success: false,
-    message: 'Too many requests from this IP, please try again later.',
+    message: 'Too many requests from this IP, please try again after 15 minutes',
   },
 });
 app.use('/api', limiter);
@@ -84,14 +83,32 @@ app.use('/api', limiter);
 // Serve static uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Health Check API
+// Health Check API (Always succeeds, reports DB state)
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     platform: 'UniConnect SmartResolve - South Eastern University of Sri Lanka (SEUSL)',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
+    dbState: mongoose.connection.readyState === 1 ? 'connected' : 'connecting_or_disconnected',
+    isVercel: !!process.env.VERCEL,
   });
+});
+
+// Database connection middleware: ensures MongoDB is connected before handling any data routes
+app.use(async (req, res, next) => {
+  if (req.path === '/api/health') return next();
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error('[DB Middleware Error]', err.message);
+    return res.status(503).json({
+      success: false,
+      message: 'Database connection failed. Please ensure MONGODB_URI is correctly configured on Vercel.',
+      error: err.message,
+    });
+  }
 });
 
 // Mount Core Application Routes

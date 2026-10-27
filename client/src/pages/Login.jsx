@@ -57,7 +57,8 @@ export const Login = () => {
         navigate('/dashboard', { replace: true });
       }
     } catch (err) {
-      setErrorMessage('Failed to log in with demo account.');
+      const msg = err.response?.data?.message || (err.response?.status ? `Server error (HTTP ${err.response.status})` : err.message);
+      setErrorMessage(msg || 'Failed to log in with demo account.');
     } finally {
       setSubmitting(false);
     }
