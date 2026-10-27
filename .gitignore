@@ -20,3 +20,6 @@ server/uploads/*
 !server/uploads/.gitkeep
 .DS_Store
 *.log
+
+.vercel
+.env*
