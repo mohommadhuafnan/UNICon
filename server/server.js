@@ -32,6 +32,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+// Trust reverse proxy (Vercel, AWS Lambda, Cloudflare)
+app.set('trust proxy', 1);
+
 // Security HTTP headers
 app.use(
   helmet({
@@ -60,6 +63,19 @@ app.use(
   })
 );
 
+// Health Check API (Always accessible, reports DB and Vercel state)
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    platform: 'UniConnect SmartResolve - South Eastern University of Sri Lanka (SEUSL)',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    dbState: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    isVercel: !!process.env.VERCEL,
+    hasMongoUri: !!process.env.MONGODB_URI,
+  });
+});
+
 // Request body parsers
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -69,10 +85,11 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Rate limiting
+// Rate limiting with disabled trust proxy validation error for Vercel
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
+  validate: { xForwardedForHeader: false, trustProxy: false },
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again after 15 minutes',
@@ -82,18 +99,6 @@ app.use('/api', limiter);
 
 // Serve static uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Health Check API (Always succeeds, reports DB state)
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    platform: 'UniConnect SmartResolve - South Eastern University of Sri Lanka (SEUSL)',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    dbState: mongoose.connection.readyState === 1 ? 'connected' : 'connecting_or_disconnected',
-    isVercel: !!process.env.VERCEL,
-  });
-});
 
 // Database connection middleware: ensures MongoDB is connected before handling any data routes
 app.use(async (req, res, next) => {
