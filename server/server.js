@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 
@@ -98,7 +99,8 @@ const limiter = rateLimit({
 app.use('/api', limiter);
 
 // Serve static uploads
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+const uploadsDir = process.env.VERCEL ? path.join(os.tmpdir(), 'uploads') : path.join(__dirname, 'uploads');
+app.use('/uploads', express.static(uploadsDir));
 
 // Database connection middleware: ensures MongoDB is connected before handling any data routes
 app.use(async (req, res, next) => {
