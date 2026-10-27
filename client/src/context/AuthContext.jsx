@@ -63,11 +63,34 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  const demoLogin = async (role = 'student') => {
-    let email = 'kasun@uniconnect.edu';
-    if (role === 'staff') email = 'dr.jayawardena@uniconnect.edu';
-    else if (role === 'organizer') email = 'malith@uniconnect.edu';
-    else if (role === 'admin') email = 'admin@uniconnect.edu';
+  // Quick Switcher for testing all official SEUSL roles
+  const demoLogin = async (role = 'STUDENT') => {
+    const upper = role.toUpperCase();
+    let email = 'kasun@seu.ac.lk'; // Default Student
+
+    if (upper === 'SUPER_ADMIN' || upper === 'ADMIN') {
+      email = 'admin@seu.ac.lk';
+    } else if (upper === 'UNIVERSITY_ADMIN') {
+      email = 'registrar@seu.ac.lk';
+    } else if (upper === 'FACULTY_OFFICER' || upper === 'STAFF') {
+      email = 'fo.tech@seu.ac.lk';
+    } else if (upper === 'HOSTEL_WARDEN') {
+      email = 'warden.hijra@seu.ac.lk';
+    } else if (upper === 'HOSTEL_SUB_WARDEN') {
+      email = 'subwarden@seu.ac.lk';
+    } else if (upper === 'MAINTENANCE_OFFICER') {
+      email = 'maintenance@seu.ac.lk';
+    } else if (upper === 'LIBRARY_OFFICER') {
+      email = 'librarian@seu.ac.lk';
+    } else if (upper === 'CANTEEN_MANAGER') {
+      email = 'canteen@seu.ac.lk';
+    } else if (upper === 'STUDENT_WELFARE_OFFICER') {
+      email = 'welfare@seu.ac.lk';
+    } else if (upper === 'SECURITY_OFFICER') {
+      email = 'security@seu.ac.lk';
+    } else if (upper === 'HEALTH_CENTRE_OFFICER') {
+      email = 'health@seu.ac.lk';
+    }
 
     return await login(email, 'password123');
   };
@@ -77,6 +100,19 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('uniconnect_user', JSON.stringify(updatedUser));
   };
 
+  const isStaff =
+    user &&
+    ![
+      'STUDENT',
+      'student',
+    ].includes(user.role);
+
+  const isAdmin =
+    user &&
+    ['SUPER_ADMIN', 'UNIVERSITY_ADMIN', 'admin'].includes(user.role);
+
+  const isStudent = user && ['STUDENT', 'student'].includes(user.role);
+
   return (
     <AuthContext.Provider
       value={{
@@ -84,6 +120,9 @@ export const AuthProvider = ({ children }) => {
         token,
         loading,
         isAuthenticated: !!user,
+        isStaff,
+        isAdmin,
+        isStudent,
         login,
         register,
         logout,

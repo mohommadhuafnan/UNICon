@@ -21,6 +21,7 @@ import { OpportunityList } from './pages/OpportunityHub/OpportunityList';
 import { ResourceList } from './pages/ResourceShare/ResourceList';
 import { CampusArenaList } from './pages/CampusArena/CampusArenaList';
 import { StudentVoiceList } from './pages/StudentVoice/StudentVoiceList';
+import { StaffDashboard } from './pages/Staff/StaffDashboard';
 import { AdminDashboard } from './pages/Admin/AdminDashboard';
 import { Profile } from './pages/Profile/Profile';
 import { NotFound } from './pages/NotFound';
@@ -86,11 +87,21 @@ function App() {
                   }
                 />
 
+                {/* Scoped Staff Portal */}
+                <Route
+                  path="staff"
+                  element={
+                    <ProtectedRoute roles={['staff', 'admin']}>
+                      <StaffDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+
                 {/* Protected Administration Portal */}
                 <Route
                   path="admin"
                   element={
-                    <ProtectedRoute roles={['staff', 'admin']}>
+                    <ProtectedRoute roles={['admin']}>
                       <AdminDashboard />
                     </ProtectedRoute>
                   }

@@ -1,1 +1,22 @@
+# Dependencies
 node_modules/
+*/node_modules/
+
+# Environment Variables
+.env
+.env.*
+*.env
+server/.env
+client/.env
+!.env.example
+!server/.env.example
+
+# Build Outputs
+dist/
+client/dist/
+
+# Uploads & Temp
+server/uploads/*
+!server/uploads/.gitkeep
+.DS_Store
+*.log

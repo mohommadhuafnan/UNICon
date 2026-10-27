@@ -13,10 +13,12 @@ import {
   ChevronLeft,
   ChevronRight,
   LifeBuoy,
+  Sliders,
+  UserCheck,
 } from 'lucide-react';
 
 export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMobile }) => {
-  const { user } = useAuth();
+  const { user, isStaff, isAdmin } = useAuth();
 
   const navItems = [
     {
@@ -132,9 +134,46 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMo
         <nav className="p-3 space-y-1">
           {navItems.map(renderNavLink)}
 
-          {/* Staff / Admin Link */}
-          {isAdminOrStaff && (
+          {/* Scoped Staff Portal Link */}
+          {(isStaff || isAdmin) && (
             <div className="pt-2 mt-2 border-t border-gray-100">
+              <NavLink
+                to="/staff"
+                onClick={onCloseMobile}
+                className={({ isActive }) =>
+                  `flex items-center gap-3.5 px-3.5 py-3 rounded-xl text-sm lg:text-[15px] font-semibold transition-all relative ${
+                    isActive
+                      ? 'bg-purple-50 text-purple-700 font-bold'
+                      : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100/70'
+                  } ${isCollapsed ? 'justify-center px-2 py-3' : ''}`
+                }
+                title={isCollapsed ? 'Staff Queue' : undefined}
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && (
+                      <span className="absolute left-0 top-2 bottom-2 w-1.5 bg-purple-600 rounded-r-full" />
+                    )}
+                    <ShieldCheck
+                      className={`w-5 h-5 flex-shrink-0 ${
+                        isActive ? 'text-purple-600' : 'text-purple-500'
+                      }`}
+                    />
+                    {!isCollapsed && <span className="flex-1 truncate tracking-tight">Staff Queue</span>}
+                    {!isCollapsed && (
+                      <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-purple-100 text-purple-700">
+                        Staff
+                      </span>
+                    )}
+                  </>
+                )}
+              </NavLink>
+            </div>
+          )}
+
+          {/* Executive Admin Center Link */}
+          {isAdmin && (
+            <div className="pt-1">
               <NavLink
                 to="/admin"
                 onClick={onCloseMobile}
@@ -152,15 +191,15 @@ export const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMo
                     {isActive && (
                       <span className="absolute left-0 top-2 bottom-2 w-1.5 bg-brand-500 rounded-r-full" />
                     )}
-                    <ShieldCheck
+                    <Sliders
                       className={`w-5 h-5 flex-shrink-0 ${
                         isActive ? 'text-brand-500' : 'text-gray-500'
                       }`}
                     />
                     {!isCollapsed && <span className="flex-1 truncate tracking-tight">Admin Center</span>}
                     {!isCollapsed && (
-                      <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-purple-100 text-purple-700">
-                        Staff
+                      <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-brand-100 text-brand-700">
+                        Admin
                       </span>
                     )}
                   </>

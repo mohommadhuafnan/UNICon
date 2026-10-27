@@ -15,10 +15,11 @@ import {
   CheckCircle,
   ExternalLink,
   ChevronDown,
+  ShieldCheck,
 } from 'lucide-react';
 
 export const Navbar = ({ onToggleMobileSidebar, onToggleCollapse, isCollapsed, hideSidebar }) => {
-  const { user, logout, demoLogin, isAuthenticated } = useAuth();
+  const { user, logout, demoLogin, isAuthenticated, isStaff, isAdmin, isStudent } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -159,49 +160,69 @@ export const Navbar = ({ onToggleMobileSidebar, onToggleCollapse, isCollapsed, h
           </button>
 
           {showRoleSwitcher && (
-            <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-dropdown py-2 z-50">
-              <div className="px-3 py-1.5 border-b border-gray-100 text-xs font-semibold text-gray-500">
-                Switch Test Role
+            <div className="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-2xl shadow-dropdown py-2 z-50 max-h-96 overflow-y-auto">
+              <div className="px-3.5 py-1.5 border-b border-gray-100 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                Switch SEUSL Test Role
               </div>
               <button
                 onClick={() => handleRoleSwitch('student')}
-                className={`w-full px-3 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'student' ? 'text-brand-600 font-bold bg-orange-50/50' : 'text-gray-700'}`}
+                className={`w-full px-3.5 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'STUDENT' || user?.role === 'student' ? 'text-brand-600 font-bold bg-orange-50/50' : 'text-gray-700'}`}
               >
                 <div>
-                  <div className="font-semibold">Student (Kasun)</div>
-                  <div className="text-[11px] text-gray-400">Reports issues, upvotes, saves</div>
+                  <div className="font-semibold">Student (TG/2022/1042)</div>
+                  <div className="text-[11px] text-gray-400">Reports complaints, AI query</div>
                 </div>
-                {user?.role === 'student' && <CheckCircle className="w-4 h-4 text-brand-500" />}
+                {(user?.role === 'STUDENT' || user?.role === 'student') && <CheckCircle className="w-4 h-4 text-brand-500" />}
               </button>
               <button
-                onClick={() => handleRoleSwitch('staff')}
-                className={`w-full px-3 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'staff' ? 'text-brand-600 font-bold bg-orange-50/50' : 'text-gray-700'}`}
+                onClick={() => handleRoleSwitch('technology_officer')}
+                className={`w-full px-3.5 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'FACULTY_OFFICER' ? 'text-purple-600 font-bold bg-purple-50/50' : 'text-gray-700'}`}
               >
                 <div>
-                  <div className="font-semibold">Staff (Dr. Jayawardena)</div>
-                  <div className="text-[11px] text-gray-400">Resolves issues, publishes notices</div>
+                  <div className="font-semibold">Faculty Officer (Technology)</div>
+                  <div className="text-[11px] text-gray-400">Scoped to Faculty of Technology</div>
                 </div>
-                {user?.role === 'staff' && <CheckCircle className="w-4 h-4 text-brand-500" />}
+                {user?.role === 'FACULTY_OFFICER' && <CheckCircle className="w-4 h-4 text-purple-600" />}
               </button>
               <button
-                onClick={() => handleRoleSwitch('organizer')}
-                className={`w-full px-3 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'organizer' ? 'text-brand-600 font-bold bg-orange-50/50' : 'text-gray-700'}`}
+                onClick={() => handleRoleSwitch('hostel_warden')}
+                className={`w-full px-3.5 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'HOSTEL_WARDEN' ? 'text-purple-600 font-bold bg-purple-50/50' : 'text-gray-700'}`}
               >
                 <div>
-                  <div className="font-semibold">Organizer (Malith / IEEE)</div>
-                  <div className="text-[11px] text-gray-400">Creates events & hackathons</div>
+                  <div className="font-semibold">Hostel Warden (Zahira Hall)</div>
+                  <div className="text-[11px] text-gray-400">Resolves hostel accommodation & facilities</div>
                 </div>
-                {user?.role === 'organizer' && <CheckCircle className="w-4 h-4 text-brand-500" />}
+                {user?.role === 'HOSTEL_WARDEN' && <CheckCircle className="w-4 h-4 text-purple-600" />}
+              </button>
+              <button
+                onClick={() => handleRoleSwitch('maintenance')}
+                className={`w-full px-3.5 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'MAINTENANCE_OFFICER' ? 'text-purple-600 font-bold bg-purple-50/50' : 'text-gray-700'}`}
+              >
+                <div>
+                  <div className="font-semibold">Maintenance Officer</div>
+                  <div className="text-[11px] text-gray-400">Civil & Electrical repairs</div>
+                </div>
+                {user?.role === 'MAINTENANCE_OFFICER' && <CheckCircle className="w-4 h-4 text-purple-600" />}
+              </button>
+              <button
+                onClick={() => handleRoleSwitch('super_admin')}
+                className={`w-full px-3.5 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'SUPER_ADMIN' ? 'text-red-600 font-bold bg-red-50/50' : 'text-gray-700'}`}
+              >
+                <div>
+                  <div className="font-semibold">Super Admin (Vice Chancellor)</div>
+                  <div className="text-[11px] text-gray-400">Total university governance & overrides</div>
+                </div>
+                {user?.role === 'SUPER_ADMIN' && <CheckCircle className="w-4 h-4 text-red-600" />}
               </button>
               <button
                 onClick={() => handleRoleSwitch('admin')}
-                className={`w-full px-3 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'admin' ? 'text-brand-600 font-bold bg-orange-50/50' : 'text-gray-700'}`}
+                className={`w-full px-3.5 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'UNIVERSITY_ADMIN' ? 'text-brand-600 font-bold bg-orange-50/50' : 'text-gray-700'}`}
               >
                 <div>
-                  <div className="font-semibold">Platform Administrator</div>
-                  <div className="text-[11px] text-gray-400">Full system & user moderation</div>
+                  <div className="font-semibold">University Administrator</div>
+                  <div className="text-[11px] text-gray-400">Rules, categories, users, RAG AI</div>
                 </div>
-                {user?.role === 'admin' && <CheckCircle className="w-4 h-4 text-brand-500" />}
+                {user?.role === 'UNIVERSITY_ADMIN' && <CheckCircle className="w-4 h-4 text-brand-500" />}
               </button>
             </div>
           )}
@@ -318,7 +339,29 @@ export const Navbar = ({ onToggleMobileSidebar, onToggleCollapse, isCollapsed, h
                   My Account Profile
                 </Link>
 
-                {(user.role === 'staff' || user.role === 'admin') && (
+                {isStudent && (
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setShowProfileMenu(false)}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <Layers className="w-4 h-4 text-brand-500" />
+                    Student Dashboard & AI
+                  </Link>
+                )}
+
+                {(isStaff || isAdmin) && (
+                  <Link
+                    to="/staff"
+                    onClick={() => setShowProfileMenu(false)}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-purple-700 hover:bg-purple-50"
+                  >
+                    <ShieldCheck className="w-4 h-4 text-purple-600" />
+                    Staff Resolution Hub
+                  </Link>
+                )}
+
+                {isAdmin && (
                   <Link
                     to="/admin"
                     onClick={() => setShowProfileMenu(false)}

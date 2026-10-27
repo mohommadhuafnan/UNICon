@@ -1,6 +1,27 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+export const USER_ROLES = [
+  'STUDENT',
+  'SUPER_ADMIN',
+  'UNIVERSITY_ADMIN',
+  'FACULTY_OFFICER',
+  'HOSTEL_WARDEN',
+  'HOSTEL_SUB_WARDEN',
+  'MAINTENANCE_OFFICER',
+  'LIBRARY_OFFICER',
+  'CANTEEN_MANAGER',
+  'HEALTH_CENTRE_OFFICER',
+  'SECURITY_OFFICER',
+  'STUDENT_WELFARE_OFFICER',
+  'OTHER_AUTHORIZED_SERVICE_OFFICER',
+  // legacy backward-compatibility
+  'student',
+  'staff',
+  'organizer',
+  'admin',
+];
+
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -24,31 +45,85 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please provide a password'],
       minlength: [6, 'Password must be at least 6 characters long'],
-      select: false, // Don't return password in queries by default
+      select: false,
     },
     role: {
       type: String,
-      enum: ['student', 'staff', 'organizer', 'admin'],
-      default: 'student',
+      enum: USER_ROLES,
+      default: 'STUDENT',
     },
     university: {
       type: String,
-      default: 'University of Colombo',
+      default: 'South Eastern University of Sri Lanka',
       trim: true,
     },
     faculty: {
       type: String,
-      default: 'Faculty of Computing',
+      default: 'Faculty of Technology',
       trim: true,
     },
     department: {
       type: String,
-      default: 'Computer Science & Software Engineering',
+      default: 'Information & Communication Technology',
       trim: true,
+    },
+    degreeProgramme: {
+      type: String,
+      default: 'Bachelor of Information and Communication Technology (Honours)',
+      trim: true,
+    },
+    academicYear: {
+      type: String,
+      default: '2022/2023',
+      trim: true,
+    },
+    registrationNumber: {
+      type: String,
+      trim: true,
+      uppercase: true,
     },
     studentId: {
       type: String,
       trim: true,
+    },
+    contactNumber: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    // Organizational scopes assigned to staff / officials
+    assignedFaculties: [{
+      type: String,
+      trim: true,
+    }],
+    assignedHostels: [{
+      type: String,
+      trim: true,
+    }],
+    assignedServiceUnits: [{
+      type: String,
+      trim: true,
+    }],
+    assignedFacilities: [{
+      type: String,
+      trim: true,
+    }],
+    // Verification workflow for student admissions/accounts
+    verificationStatus: {
+      type: String,
+      enum: ['pending', 'verified', 'rejected'],
+      default: 'verified',
+    },
+    verificationNote: {
+      type: String,
+      default: '',
+    },
+    verifiedAt: {
+      type: Date,
+    },
+    verifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
     },
     avatar: {
       type: String,
@@ -73,6 +148,16 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Normalize studentId and registrationNumber
+userSchema.pre('save', function (next) {
+  if (this.registrationNumber && !this.studentId) {
+    this.studentId = this.registrationNumber;
+  } else if (this.studentId && !this.registrationNumber) {
+    this.registrationNumber = this.studentId;
+  }
+  next();
+});
 
 // Hash password before saving
 userSchema.pre('save', async function (next) {

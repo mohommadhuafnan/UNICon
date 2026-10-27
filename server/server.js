@@ -13,13 +13,16 @@ import { errorHandler } from './middleware/errorHandler.js';
 // Route imports
 import authRoutes from './routes/authRoutes.js';
 import issueRoutes from './routes/issueRoutes.js';
+import staffRoutes from './routes/staffRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import agentRoutes from './routes/agentRoutes.js';
+import metadataRoutes from './routes/metadataRoutes.js';
 import announcementRoutes from './routes/announcementRoutes.js';
 import opportunityRoutes from './routes/opportunityRoutes.js';
 import resourceRoutes from './routes/resourceRoutes.js';
 import eventRoutes from './routes/eventRoutes.js';
 import feedbackRoutes from './routes/feedbackRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
-import adminRoutes from './routes/adminRoutes.js';
 
 dotenv.config();
 
@@ -43,6 +46,7 @@ const allowedOrigins = [
   process.env.CLIENT_URL || 'http://localhost:5173',
   'http://localhost:3000',
   'http://127.0.0.1:5173',
+  'https://unicon-eight.vercel.app',
 ];
 app.use(
   cors({
@@ -68,8 +72,8 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Rate Limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Limit each IP to 1000 requests per window
+  windowMs: 15 * 60 * 1000,
+  max: 2000,
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again later.',
@@ -84,28 +88,38 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    platform: 'UniConnect - The University Community & Campus Intelligence Platform',
+    platform: 'UniConnect SmartResolve - South Eastern University of Sri Lanka (SEUSL)',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
   });
 });
 
-// Mount Routes
+// Mount Core Application Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/issues', issueRoutes);
+app.use('/api/complaints', issueRoutes); // Dual alias for issues & complaints
+app.use('/api/staff', staffRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/agent', agentRoutes);
+app.use('/api/metadata', metadataRoutes);
+
+// Additional Campus Modules
 app.use('/api/announcements', announcementRoutes);
 app.use('/api/opportunities', opportunityRoutes);
 app.use('/api/resources', resourceRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/notifications', notificationRoutes);
-app.use('/api/admin', adminRoutes);
 
 // Centralized Error Handler
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`[UniConnect API] Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[UniConnect SmartResolve API] Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  });
+}
+
+export default app;
