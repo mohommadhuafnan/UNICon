@@ -2,10 +2,10 @@
   "name": "uniconnect-server",
   "version": "1.0.0",
   "description": "Backend API for UniConnect Platform",
-  "main": "server.js",
+  "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
+    "start": "node index.js",
     "dev": "node --watch server.js",
     "seed": "node config/seed.js"
   },
