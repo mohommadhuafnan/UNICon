@@ -19,19 +19,17 @@ import {
 } from 'lucide-react';
 
 export const Navbar = ({ onToggleMobileSidebar, onToggleCollapse, isCollapsed, hideSidebar }) => {
-  const { user, logout, demoLogin, isAuthenticated, isStaff, isAdmin, isStudent } = useAuth();
+  const { user, logout, isAuthenticated, isStaff, isAdmin, isStudent } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const notifRef = useRef(null);
   const profileRef = useRef(null);
-  const roleRef = useRef(null);
 
   // Close popovers on click outside
   useEffect(() => {
@@ -42,9 +40,6 @@ export const Navbar = ({ onToggleMobileSidebar, onToggleCollapse, isCollapsed, h
       if (profileRef.current && !profileRef.current.contains(e.target)) {
         setShowProfileMenu(false);
       }
-      if (roleRef.current && !roleRef.current.contains(e.target)) {
-        setShowRoleSwitcher(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -54,16 +49,6 @@ export const Navbar = ({ onToggleMobileSidebar, onToggleCollapse, isCollapsed, h
     e.preventDefault();
     if (searchQuery.trim()) {
       navigate(`/campuscare?search=${encodeURIComponent(searchQuery.trim())}`);
-    }
-  };
-
-  const handleRoleSwitch = async (role) => {
-    try {
-      await demoLogin(role);
-      setShowRoleSwitcher(false);
-      showToast(`Switched active profile to ${role.toUpperCase()}`, 'success');
-    } catch (err) {
-      showToast('Error switching demo account', 'error');
     }
   };
 
@@ -147,87 +132,6 @@ export const Navbar = ({ onToggleMobileSidebar, onToggleCollapse, isCollapsed, h
 
       {/* Right Actions */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Quick Demo Role Switcher Button */}
-        <div className="relative" ref={roleRef}>
-          <button
-            onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
-            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-orange-50 text-brand-700 hover:bg-orange-100 border border-brand-200 transition-colors"
-            title="Switch demo account to test different roles"
-          >
-            <Shield className="w-3.5 h-3.5 text-brand-500" />
-            <span className="capitalize">{user ? user.role : 'Demo Switch'}</span>
-            <ChevronDown className="w-3 h-3 text-brand-500" />
-          </button>
-
-          {showRoleSwitcher && (
-            <div className="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-2xl shadow-dropdown py-2 z-50 max-h-96 overflow-y-auto">
-              <div className="px-3.5 py-1.5 border-b border-gray-100 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                Switch SEUSL Test Role
-              </div>
-              <button
-                onClick={() => handleRoleSwitch('student')}
-                className={`w-full px-3.5 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'STUDENT' || user?.role === 'student' ? 'text-brand-600 font-bold bg-orange-50/50' : 'text-gray-700'}`}
-              >
-                <div>
-                  <div className="font-semibold">Student (TG/2022/1042)</div>
-                  <div className="text-[11px] text-gray-400">Reports complaints, AI query</div>
-                </div>
-                {(user?.role === 'STUDENT' || user?.role === 'student') && <CheckCircle className="w-4 h-4 text-brand-500" />}
-              </button>
-              <button
-                onClick={() => handleRoleSwitch('technology_officer')}
-                className={`w-full px-3.5 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'FACULTY_OFFICER' ? 'text-purple-600 font-bold bg-purple-50/50' : 'text-gray-700'}`}
-              >
-                <div>
-                  <div className="font-semibold">Faculty Officer (Technology)</div>
-                  <div className="text-[11px] text-gray-400">Scoped to Faculty of Technology</div>
-                </div>
-                {user?.role === 'FACULTY_OFFICER' && <CheckCircle className="w-4 h-4 text-purple-600" />}
-              </button>
-              <button
-                onClick={() => handleRoleSwitch('hostel_warden')}
-                className={`w-full px-3.5 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'HOSTEL_WARDEN' ? 'text-purple-600 font-bold bg-purple-50/50' : 'text-gray-700'}`}
-              >
-                <div>
-                  <div className="font-semibold">Hostel Warden (Zahira Hall)</div>
-                  <div className="text-[11px] text-gray-400">Resolves hostel accommodation & facilities</div>
-                </div>
-                {user?.role === 'HOSTEL_WARDEN' && <CheckCircle className="w-4 h-4 text-purple-600" />}
-              </button>
-              <button
-                onClick={() => handleRoleSwitch('maintenance')}
-                className={`w-full px-3.5 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'MAINTENANCE_OFFICER' ? 'text-purple-600 font-bold bg-purple-50/50' : 'text-gray-700'}`}
-              >
-                <div>
-                  <div className="font-semibold">Maintenance Officer</div>
-                  <div className="text-[11px] text-gray-400">Civil & Electrical repairs</div>
-                </div>
-                {user?.role === 'MAINTENANCE_OFFICER' && <CheckCircle className="w-4 h-4 text-purple-600" />}
-              </button>
-              <button
-                onClick={() => handleRoleSwitch('super_admin')}
-                className={`w-full px-3.5 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'SUPER_ADMIN' ? 'text-red-600 font-bold bg-red-50/50' : 'text-gray-700'}`}
-              >
-                <div>
-                  <div className="font-semibold">Super Admin (Vice Chancellor)</div>
-                  <div className="text-[11px] text-gray-400">Total university governance & overrides</div>
-                </div>
-                {user?.role === 'SUPER_ADMIN' && <CheckCircle className="w-4 h-4 text-red-600" />}
-              </button>
-              <button
-                onClick={() => handleRoleSwitch('admin')}
-                className={`w-full px-3.5 py-2 text-left text-xs flex items-center justify-between hover:bg-gray-50 ${user?.role === 'UNIVERSITY_ADMIN' ? 'text-brand-600 font-bold bg-orange-50/50' : 'text-gray-700'}`}
-              >
-                <div>
-                  <div className="font-semibold">University Administrator</div>
-                  <div className="text-[11px] text-gray-400">Rules, categories, users, RAG AI</div>
-                </div>
-                {user?.role === 'UNIVERSITY_ADMIN' && <CheckCircle className="w-4 h-4 text-brand-500" />}
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* Notifications Popover */}
         {isAuthenticated && (
           <div className="relative" ref={notifRef}>
@@ -310,11 +214,11 @@ export const Navbar = ({ onToggleMobileSidebar, onToggleCollapse, isCollapsed, h
                 {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
               </div>
               <div className="hidden md:block text-left">
-                <div className="text-xs font-bold text-gray-900 leading-tight truncate max-w-[110px]">
+                <div className="text-xs font-bold text-gray-900 leading-tight truncate max-w-[120px]">
                   {user.name}
                 </div>
-                <div className="text-[10px] font-semibold text-brand-600 uppercase tracking-wider">
-                  {user.role}
+                <div className="text-[10px] text-gray-400 truncate max-w-[120px]">
+                  {user.email || user.faculty || 'Campus Member'}
                 </div>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-gray-400 hidden md:block" />
@@ -325,9 +229,11 @@ export const Navbar = ({ onToggleMobileSidebar, onToggleCollapse, isCollapsed, h
                 <div className="px-3.5 py-2 border-b border-gray-100">
                   <div className="text-xs font-bold text-gray-900 truncate">{user.name}</div>
                   <div className="text-[11px] text-gray-500 truncate">{user.email}</div>
-                  <div className="text-[10px] font-semibold text-brand-600 mt-0.5 capitalize">
-                    {user.role} · {user.faculty || 'Campus Member'}
-                  </div>
+                  {user.faculty && (
+                    <div className="text-[10px] text-gray-400 mt-0.5 truncate">
+                      {user.faculty}
+                    </div>
+                  )}
                 </div>
 
                 <Link

@@ -3,6 +3,7 @@ import IssueSupport from '../models/IssueSupport.js';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import { classifyComplaintWithAI } from '../services/openRouterService.js';
+import { classifyComplaintWithGemini, getUnitForRole, getCategoryKeyForRole } from '../services/geminiAgentService.js';
 import { routeComplaint } from '../services/routingEngine.js';
 import { logAuditEvent } from '../services/auditService.js';
 
@@ -244,12 +245,14 @@ export const createIssue = async (req, res, next) => {
       priority,
       isAnonymous,
       imageUrl,
+      submissionMode, // 'manual' | 'agent'
+      targetOfficerRole, // e.g. 'FACULTY_OFFICER' | 'LIBRARY_OFFICER' | 'HOSTEL_WARDEN' | 'CANTEEN_MANAGER'
     } = req.body;
 
-    if (!title || !description || !category || !location) {
+    if (!title || !description) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide title, detailed description, category, and campus location.',
+        message: 'Please provide both title and detailed complaint description.',
       });
     }
 
@@ -290,30 +293,92 @@ export const createIssue = async (req, res, next) => {
       finalImageUrl = `/uploads/${req.file.filename}`;
     }
 
-    // 1. AI Analysis & Classification
+    let assignedCategory = category || 'FACULTY_RELATED';
+    let assignedSubcategory = subcategory || 'GENERAL';
+    let routing = null;
     let aiClassification = null;
-    try {
-      aiClassification = await classifyComplaintWithAI({
+
+    if (submissionMode === 'agent') {
+      // 1. AI Decision-Making Agent using Google Gemini
+      const geminiDecision = await classifyComplaintWithGemini({
         title,
         description,
-        location,
         faculty: req.user.faculty,
       });
-    } catch (aiErr) {
-      console.warn('[AI Engine Warning]', aiErr.message);
+
+      assignedCategory = geminiDecision.categoryKey;
+      assignedSubcategory = 'AI_AUTO_ROUTED';
+
+      // Find responsible staff user corresponding to targetRole
+      const targetOfficer = await User.findOne({
+        role: geminiDecision.targetRole,
+        accountStatus: 'active',
+      }).select('_id name role email');
+
+      routing = {
+        status: 'ASSIGNED',
+        assignedUnit: geminiDecision.assignedUnit,
+        assignedStaff: targetOfficer ? targetOfficer._id : null,
+        assignedStaffName: targetOfficer ? `${targetOfficer.name} (${targetOfficer.role})` : geminiDecision.assignedUnit,
+        ruleApplied: `Gemini AI Decision Agent (${geminiDecision.aiModel})`,
+        reason: geminiDecision.reasoning,
+        isVerifiedAssignment: true,
+        targetRole: geminiDecision.targetRole,
+      };
+
+      aiClassification = {
+        category: geminiDecision.categoryKey,
+        targetRole: geminiDecision.targetRole,
+        confidence: geminiDecision.confidence,
+        summary: geminiDecision.summary,
+        reason: geminiDecision.reasoning,
+        suggestedPriority: geminiDecision.suggestedPriority,
+        aiModel: geminiDecision.aiModel,
+      };
+    } else if (targetOfficerRole) {
+      // 2. Manual Routing mode with directly chosen official role
+      assignedCategory = getCategoryKeyForRole(targetOfficerRole);
+      const assignedUnit = getUnitForRole(targetOfficerRole);
+
+      const targetOfficer = await User.findOne({
+        role: targetOfficerRole,
+        accountStatus: 'active',
+      }).select('_id name role email');
+
+      routing = {
+        status: 'ASSIGNED',
+        assignedUnit,
+        assignedStaff: targetOfficer ? targetOfficer._id : null,
+        assignedStaffName: targetOfficer ? `${targetOfficer.name} (${targetOfficer.role})` : assignedUnit,
+        ruleApplied: 'Manual Targeted Routing',
+        reason: `Student directly routed complaint to ${targetOfficerRole}`,
+        isVerifiedAssignment: true,
+        targetRole: targetOfficerRole,
+      };
+    } else {
+      // 3. Fallback Standard Scope Routing
+      try {
+        aiClassification = await classifyComplaintWithAI({
+          title,
+          description,
+          location,
+          faculty: req.user.faculty,
+        });
+      } catch (aiErr) {
+        console.warn('[AI Engine Warning]', aiErr.message);
+      }
+
+      assignedCategory = aiClassification?.category || category || 'CAMPUS_MAINTENANCE';
+      assignedSubcategory = subcategory || aiClassification?.subcategory || 'GENERAL';
+
+      routing = await routeComplaint({
+        category: assignedCategory,
+        subcategory: assignedSubcategory,
+        faculty: req.user.faculty,
+        locationDetails: parsedLocationDetails,
+        location: location || 'Campus',
+      });
     }
-
-    // 2. Verified Routing Engine
-    const assignedCategory = aiClassification?.category || category;
-    const assignedSubcategory = subcategory || aiClassification?.subcategory || 'GENERAL';
-
-    const routing = await routeComplaint({
-      category: assignedCategory,
-      subcategory: assignedSubcategory,
-      faculty: req.user.faculty,
-      locationDetails: parsedLocationDetails,
-      location,
-    });
 
     // 3. Create Ticket with Unique Identifier
     const initialStatus = routing.status || 'ASSIGNED';
@@ -324,7 +389,7 @@ export const createIssue = async (req, res, next) => {
       description: description.trim(),
       category: assignedCategory,
       subcategory: assignedSubcategory,
-      location: location.trim(),
+      location: (location || parsedLocationDetails.roomOrArea || 'SEUSL Campus').trim(),
       specificLocation: specificLocation ? specificLocation.trim() : '',
       locationDetails: parsedLocationDetails,
       university: 'South Eastern University of Sri Lanka',

@@ -39,11 +39,11 @@ function App() {
                 <Route path="login" element={<Login />} />
                 <Route path="register" element={<Register />} />
 
-                {/* Authenticated Student Dashboard */}
+                {/* Authenticated Student Dashboard (Students only) */}
                 <Route
                   path="dashboard"
                   element={
-                    <ProtectedRoute>
+                    <ProtectedRoute roles={['STUDENT', 'student']}>
                       <StudentDashboard />
                     </ProtectedRoute>
                   }

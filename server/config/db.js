@@ -14,6 +14,7 @@ if (process.platform === 'win32' && !process.env.VERCEL) {
         callback = options;
         options = {};
       }
+
       if (hostname && (hostname.includes('mongodb.net') || hostname.includes('amazonaws.com'))) {
         resolver
           .resolve4(hostname)
@@ -44,10 +45,12 @@ export const connectDB = async () => {
     return cachedConnection;
   }
 
-  const mongoUri = process.env.MONGODB_URI;
+  const mongoUri =
+    process.env.MONGODB_URI ||
+    'mongodb://127.0.0.1:27017/uniconnect';
 
-  if (!mongoUri || (process.env.VERCEL && (mongoUri.includes('127.0.0.1') || mongoUri.includes('localhost')))) {
-    throw new Error('MONGODB_URI on Vercel is currently set to localhost (127.0.0.1). Please update MONGODB_URI in Vercel Project Settings -> Environment Variables with your MongoDB Atlas connection string (mongodb+srv://...).');
+  if (!process.env.MONGODB_URI && process.env.VERCEL) {
+    throw new Error('MONGODB_URI is not set in Vercel environment variables. Please add MONGODB_URI in Vercel Project Settings -> Environment Variables.');
   }
 
   try {

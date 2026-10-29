@@ -9,14 +9,17 @@ import {
   ArrowLeft,
   CheckCircle,
   EyeOff,
-  MapPin,
-  Building,
   User,
-  Hash,
   Sparkles,
-  AlertCircle,
-  Clock,
+  Bot,
+  Send,
+  Building,
+  BookOpen,
+  Home,
+  Coffee,
   ArrowRight,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 
 export const ReportIssue = () => {
@@ -24,62 +27,67 @@ export const ReportIssue = () => {
   const { showToast } = useToast();
   const navigate = useNavigate();
 
-  // Dynamic organizational metadata fetched from backend
-  const [metadata, setMetadata] = useState(null);
-  const [loadingMeta, setLoadingMeta] = useState(true);
+  // Mode: 'agent' (AI Autonomous Decision Routing) vs 'manual' (Direct targeted officer selection)
+  const [submissionMode, setSubmissionMode] = useState('agent');
 
-  // Form state
-  const [categoryKey, setCategoryKey] = useState('FACULTY_RELATED');
-  const [subcategory, setSubcategory] = useState('CLASSROOM_EQUIPMENT');
+  // Manual mode state
+  const [targetOfficerRole, setTargetOfficerRole] = useState('FACULTY_OFFICER');
+
+  // Common form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('Medium');
   const [isAnonymous, setIsAnonymous] = useState(false);
-
-  // Dynamic location fields
-  const [selectedFaculty, setSelectedFaculty] = useState(user?.faculty || 'Faculty of Technology');
-  const [selectedHostel, setSelectedHostel] = useState('Hijra Hostel');
-  const [hostelBlock, setHostelBlock] = useState('Block B');
-  const [building, setBuilding] = useState('Technology Complex Block A');
   const [specificRoom, setSpecificRoom] = useState('');
-  const [canteenLocation, setCanteenLocation] = useState('Main Campus Canteen Complex, Oluvil');
 
   // Photographic attachments
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
 
-  // Submission & Confirmation state
+  // Agent interactive simulation / preview state
+  const [agentAnalyzing, setAgentAnalyzing] = useState(false);
+  const [agentDecision, setAgentDecision] = useState(null);
+
+  // Submission state
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [submittedTicket, setSubmittedTicket] = useState(null);
 
-  useEffect(() => {
-    const fetchMetadata = async () => {
-      try {
-        setLoadingMeta(true);
-        const res = await api.get('/metadata/organization');
-        if (res.data.success) {
-          setMetadata(res.data.data);
-        }
-      } catch (err) {
-        console.error('Error fetching metadata:', err);
-      } finally {
-        setLoadingMeta(false);
-      }
-    };
-    fetchMetadata();
-  }, []);
-
-  // Update subcategories when categoryKey changes
-  const activeCategory = metadata?.categories?.find((c) => c.key === categoryKey);
-  const availableSubcategories = activeCategory?.subcategories || [];
-
-  useEffect(() => {
-    if (availableSubcategories.length > 0) {
-      setSubcategory(availableSubcategories[0].name);
-    }
-  }, [categoryKey]);
+  const officerOptions = [
+    {
+      role: 'FACULTY_OFFICER',
+      label: 'Faculty Officer',
+      icon: Building,
+      desc: 'Lecture halls, multimedia projectors, lab computers, departmental matters',
+      color: 'border-blue-200 bg-blue-50/40 text-blue-800',
+      activeColor: 'ring-2 ring-blue-600 bg-blue-50 border-blue-500',
+    },
+    {
+      role: 'LIBRARY_OFFICER',
+      label: 'Library Officer',
+      icon: BookOpen,
+      desc: 'Books, periodicals, silent study rooms, air conditioning, digital lending',
+      color: 'border-indigo-200 bg-indigo-50/40 text-indigo-800',
+      activeColor: 'ring-2 ring-indigo-600 bg-indigo-50 border-indigo-500',
+    },
+    {
+      role: 'HOSTEL_WARDEN',
+      label: 'Hostel Warden',
+      icon: Home,
+      desc: 'Residential halls (Hijra, Zahira, etc.), dorm rooms, water tanks, electricity',
+      color: 'border-amber-200 bg-amber-50/40 text-amber-800',
+      activeColor: 'ring-2 ring-amber-600 bg-amber-50 border-amber-500',
+    },
+    {
+      role: 'CANTEEN_MANAGER',
+      label: 'Canteen Manager',
+      icon: Coffee,
+      desc: 'Student cafeteria, dining hygiene, food freshness, meal pricing, water cooler',
+      color: 'border-purple-200 bg-purple-50/40 text-purple-800',
+      activeColor: 'ring-2 ring-purple-600 bg-purple-50 border-purple-500',
+    },
+  ];
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -91,38 +99,6 @@ export const ReportIssue = () => {
       setImageFile(file);
       setImagePreview(URL.createObjectURL(file));
     }
-  };
-
-  // Derive consolidated location string and locationDetails
-  const constructLocationData = () => {
-    let locString = '';
-    let details = {
-      locationType: activeCategory?.locationType || 'GENERAL',
-      facultyName: '',
-      hostelName: '',
-      building: '',
-      roomOrArea: specificRoom.trim(),
-    };
-
-    if (categoryKey === 'HOSTEL_ACCOMMODATION') {
-      details.hostelName = selectedHostel;
-      details.building = hostelBlock;
-      locString = `${selectedHostel}, ${hostelBlock}${specificRoom ? ` - Room ${specificRoom}` : ''}`;
-    } else if (categoryKey === 'FACULTY_RELATED') {
-      details.facultyName = selectedFaculty;
-      details.building = building;
-      locString = `${selectedFaculty}, ${building}${specificRoom ? ` (${specificRoom})` : ''}`;
-    } else if (categoryKey === 'LIBRARY') {
-      details.building = 'Central Library Complex, Oluvil';
-      locString = `SEUSL Central Library${specificRoom ? ` - ${specificRoom}` : ''}`;
-    } else if (categoryKey === 'CANTEEN_FOOD') {
-      details.building = canteenLocation;
-      locString = `${canteenLocation}${specificRoom ? ` - ${specificRoom}` : ''}`;
-    } else {
-      locString = `SEUSL Campus Facilities${specificRoom ? ` - ${specificRoom}` : ''}`;
-    }
-
-    return { location: locString, locationDetails: details };
   };
 
   const handleOpenReview = (e) => {
@@ -140,18 +116,19 @@ export const ReportIssue = () => {
   const handleConfirmSubmit = async () => {
     try {
       setSubmitting(true);
-      const { location, locationDetails } = constructLocationData();
-
       const submitData = new FormData();
       submitData.append('title', title.trim());
       submitData.append('description', description.trim());
-      submitData.append('category', categoryKey);
-      submitData.append('subcategory', subcategory);
-      submitData.append('location', location);
-      submitData.append('specificLocation', specificRoom.trim());
-      submitData.append('locationDetails', JSON.stringify(locationDetails));
+      submitData.append('submissionMode', submissionMode);
+      submitData.append('targetOfficerRole', targetOfficerRole);
       submitData.append('priority', priority);
       submitData.append('isAnonymous', isAnonymous);
+      submitData.append('specificLocation', specificRoom.trim());
+
+      const derivedLoc = specificRoom.trim()
+        ? `SEUSL Campus - ${specificRoom.trim()}`
+        : `${user?.faculty || 'SEUSL Campus'}`;
+      submitData.append('location', derivedLoc);
 
       if (imageFile) {
         submitData.append('image', imageFile);
@@ -164,7 +141,10 @@ export const ReportIssue = () => {
       if (res.data.success) {
         setShowSummaryModal(false);
         setSubmittedTicket(res.data.data);
-        showToast(`Complaint submitted successfully! Ticket #${res.data.ticketNumber}`, 'success');
+        showToast(
+          `Complaint submitted successfully! Ticket #${res.data.ticketNumber}`,
+          'success'
+        );
       }
     } catch (err) {
       setErrorMessage(
@@ -193,7 +173,7 @@ export const ReportIssue = () => {
               #{submittedTicket.ticketNumber}
             </h1>
             <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
-              Your grievance has been validated and routed to the verified university service unit.
+              Your grievance has been successfully routed and notification sent to the responsible university official.
             </p>
           </div>
 
@@ -203,37 +183,31 @@ export const ReportIssue = () => {
               <span className="font-bold text-gray-900">{submittedTicket.title}</span>
             </div>
             <div className="flex justify-between py-1 border-b border-gray-200">
-              <span className="text-gray-500">Assigned Service Unit:</span>
+              <span className="text-gray-500">Routing Decision:</span>
               <span className="font-bold text-brand-600">
-                {submittedTicket.routingDecision?.assignedUnit || 'Maintenance Division'}
+                {submittedTicket.routingDecision?.assignedUnit || 'Assigned Officer'}
               </span>
             </div>
             <div className="flex justify-between py-1 border-b border-gray-200">
-              <span className="text-gray-500">Initial Status:</span>
-              <span className="font-bold uppercase text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
-                {submittedTicket.status}
+              <span className="text-gray-500">Assigned Official:</span>
+              <span className="font-bold text-purple-700">
+                {submittedTicket.routingDecision?.assignedStaffName || 'Officer Queue'}
               </span>
             </div>
-            <div className="flex justify-between py-1">
-              <span className="text-gray-500">Routing Policy Applied:</span>
-              <span className="font-medium text-gray-700">
-                {submittedTicket.routingDecision?.ruleApplied || 'Verified Standard Scope'}
+            <div className="flex justify-between py-1 border-b border-gray-200">
+              <span className="text-gray-500">Routing Method:</span>
+              <span className="font-semibold text-gray-700">
+                {submittedTicket.routingDecision?.ruleApplied || 'Targeted Routing'}
               </span>
             </div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-orange-50 border border-orange-200 text-left text-xs text-orange-950 space-y-1">
-            <div className="font-bold flex items-center gap-1.5 text-brand-700">
-              <Clock className="w-4 h-4" />
-              <span>What Happens Next?</span>
-            </div>
-            <p className="text-[11px] leading-relaxed text-orange-900">
-              1. The assigned service division will acknowledge and inspect the reported facility.
-              <br />
-              2. You will receive in-app status updates as repairs progress.
-              <br />
-              3. If clarification is needed, authorized staff will post a question directly to your ticket.
-            </p>
+            {submittedTicket.routingDecision?.reason && (
+              <div className="py-1">
+                <span className="text-gray-500 block mb-0.5">Agent Reasoning:</span>
+                <span className="text-gray-700 italic bg-white p-2 rounded-lg border border-gray-200 block">
+                  "{submittedTicket.routingDecision.reason}"
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
@@ -241,7 +215,7 @@ export const ReportIssue = () => {
               to={`/campuscare/${submittedTicket._id}`}
               className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-md shadow-brand-500/20 transition-all flex items-center justify-center gap-2"
             >
-              <span>View Ticket & Timeline</span>
+              <span>View Ticket Details</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
@@ -272,17 +246,73 @@ export const ReportIssue = () => {
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-200 shadow-sm space-y-6">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-orange-100 text-brand-600 flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-xl bg-orange-100 text-brand-600 flex items-center justify-center font-bold">
               <ShieldAlert className="w-5 h-5" />
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-gray-900">
-              Submit University Complaint
-            </h1>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-gray-900">
+                Submit University Complaint
+              </h1>
+              <p className="text-xs text-gray-500">
+                UniConnect SmartResolve · South Eastern University of Sri Lanka (SEUSL)
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-gray-500 mt-1">
-            UniConnect SmartResolve · South Eastern University of Sri Lanka (SEUSL)
-          </p>
         </div>
+
+        {/* 2 COMPLAINT SUBMISSION MODES (AI AGENT vs MANUAL TARGETED) */}
+        <div className="grid grid-cols-2 gap-3 p-1.5 bg-gray-100 rounded-2xl">
+          <button
+            type="button"
+            onClick={() => setSubmissionMode('agent')}
+            className={`py-3 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              submissionMode === 'agent'
+                ? 'bg-white text-brand-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-brand-500" />
+            <span>AI Agent Decision Routing</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSubmissionMode('manual')}
+            className={`py-3 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+              submissionMode === 'manual'
+                ? 'bg-white text-brand-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <User className="w-4 h-4 text-purple-600" />
+            <span>Manual Targeted Routing</span>
+          </button>
+        </div>
+
+        {/* MODE BANNER */}
+        {submissionMode === 'agent' ? (
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 border border-orange-200 flex items-start gap-3">
+            <Bot className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs">
+              <div className="font-bold text-gray-900">
+                Google Gemini AI Intelligent Decision-Maker Active
+              </div>
+              <div className="text-gray-600 mt-0.5 leading-relaxed">
+                Type your complaint naturally. Our Gemini AI agent will read, understand the context (e.g. library books, hostel water leak, canteen food, lecture projector), make the routing decision, and dispatch it to the exact responsible officer automatically.
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="p-4 rounded-2xl bg-purple-50 border border-purple-200 flex items-start gap-3">
+            <Building className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+            <div className="text-xs">
+              <div className="font-bold text-gray-900">Manual Direct Officer Selection</div>
+              <div className="text-gray-600 mt-0.5 leading-relaxed">
+                Select specifically which university official should receive and resolve this complaint.
+              </div>
+            </div>
+          </div>
+        )}
 
         {errorMessage && (
           <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-medium">
@@ -295,7 +325,7 @@ export const ReportIssue = () => {
           <div className="p-4 rounded-2xl bg-gray-50 border border-gray-200">
             <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-brand-500" />
-              <span>Verified Student Record (Read-Only)</span>
+              <span>Verified Student Record</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div>
@@ -317,252 +347,48 @@ export const ReportIssue = () => {
             </div>
           </div>
 
-          {/* Category & Subcategory */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                Service Category *
+          {/* MANUAL MODE: SELECT THE TARGET ROLE */}
+          {submissionMode === 'manual' && (
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-gray-700">
+                Select Destination University Official *
               </label>
-              <select
-                value={categoryKey}
-                onChange={(e) => setCategoryKey(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:border-brand-500 text-gray-900 font-semibold"
-              >
-                {metadata?.categories?.map((cat) => (
-                  <option key={cat.key} value={cat.key}>
-                    {cat.displayName}
-                  </option>
-                )) || (
-                  <>
-                    <option value="FACULTY_RELATED">A. Faculty-Related Issues</option>
-                    <option value="HOSTEL_ACCOMMODATION">B. Hostel and Accommodation</option>
-                    <option value="LIBRARY">C. Library</option>
-                    <option value="CANTEEN_FOOD">D. Canteen and Food Facilities</option>
-                    <option value="CAMPUS_MAINTENANCE">E. Campus Maintenance</option>
-                    <option value="OTHER_SERVICES">F. Other University Services</option>
-                  </>
-                )}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                Specific Subcategory *
-              </label>
-              <select
-                value={subcategory}
-                onChange={(e) => setSubcategory(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:border-brand-500 text-gray-900 font-semibold"
-              >
-                {availableSubcategories.map((sub) => (
-                  <option key={sub.name} value={sub.name}>
-                    {sub.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* DYNAMIC LOCATION FIELDS BASED ON CATEGORY */}
-          <div className="p-4 rounded-2xl bg-campus-bg/70 border border-gray-200 space-y-3">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-brand-500" />
-              <span>Campus Facility & Location Details</span>
-            </div>
-
-            {categoryKey === 'HOSTEL_ACCOMMODATION' && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Select Hostel *
-                  </label>
-                  <select
-                    value={selectedHostel}
-                    onChange={(e) => setSelectedHostel(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900"
-                  >
-                    {metadata?.hostels?.map((h) => (
-                      <option key={h._id} value={h.name}>
-                        {h.name} ({h.gender})
-                      </option>
-                    )) || (
-                      <>
-                        <option value="Hijra Hostel">Hijra Hostel (Male)</option>
-                        <option value="Al-Aqsa Hostel">Al-Aqsa Hostel (Male)</option>
-                        <option value="Bilal Hostel">Bilal Hostel (Male)</option>
-                        <option value="Zahira Hostel">Zahira Hostel (Female)</option>
-                        <option value="Fathima Hostel">Fathima Hostel (Female)</option>
-                        <option value="Zainab Hostel">Zainab Hostel (Female)</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Hostel Block / Wing
-                  </label>
-                  <input
-                    type="text"
-                    value={hostelBlock}
-                    onChange={(e) => setHostelBlock(e.target.value)}
-                    placeholder="e.g. Block B or 2nd Floor"
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Room / Washroom Area
-                  </label>
-                  <input
-                    type="text"
-                    value={specificRoom}
-                    onChange={(e) => setSpecificRoom(e.target.value)}
-                    placeholder="e.g. Room 204 or Washroom #2"
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900"
-                  />
-                </div>
-              </div>
-            )}
-
-            {categoryKey === 'FACULTY_RELATED' && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Faculty *
-                  </label>
-                  <select
-                    value={selectedFaculty}
-                    onChange={(e) => setSelectedFaculty(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900"
-                  >
-                    {metadata?.faculties?.map((f) => (
-                      <option key={f._id} value={f.name}>
-                        {f.name} ({f.code})
-                      </option>
-                    )) || (
-                      <>
-                        <option value="Faculty of Technology">Faculty of Technology</option>
-                        <option value="Faculty of Engineering">Faculty of Engineering</option>
-                        <option value="Faculty of Applied Sciences">Faculty of Applied Sciences</option>
-                        <option value="Faculty of Management and Commerce">Faculty of Management & Commerce</option>
-                        <option value="Faculty of Arts and Culture">Faculty of Arts & Culture</option>
-                        <option value="Faculty of Islamic Studies and Arabic Language">Faculty of Islamic Studies</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Building / Complex
-                  </label>
-                  <input
-                    type="text"
-                    value={building}
-                    onChange={(e) => setBuilding(e.target.value)}
-                    placeholder="e.g. Technology Complex Block A"
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Hall / Room / Lab
-                  </label>
-                  <input
-                    type="text"
-                    value={specificRoom}
-                    onChange={(e) => setSpecificRoom(e.target.value)}
-                    placeholder="e.g. Hall W201 or Embedded Lab"
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900"
-                  />
-                </div>
-              </div>
-            )}
-
-            {categoryKey === 'LIBRARY' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Library Facility
-                  </label>
-                  <select className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900">
-                    <option value="Main Library Oluvil">SEUSL Main Library, Oluvil</option>
-                    <option value="Sammanthurai Science Library">Sammanthurai Campus Science Library</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Section / Reading Hall
-                  </label>
-                  <input
-                    type="text"
-                    value={specificRoom}
-                    onChange={(e) => setSpecificRoom(e.target.value)}
-                    placeholder="e.g. 1st Floor Periodicals Hall or Digital Lab"
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900"
-                  />
-                </div>
+                {officerOptions.map((opt) => {
+                  const Icon = opt.icon;
+                  const isSelected = targetOfficerRole === opt.role;
+                  return (
+                    <button
+                      key={opt.role}
+                      type="button"
+                      onClick={() => setTargetOfficerRole(opt.role)}
+                      className={`p-3.5 rounded-2xl border text-left transition-all flex items-start gap-3 ${
+                        isSelected
+                          ? `${opt.activeColor} shadow-xs`
+                          : 'border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50/50'
+                      }`}
+                    >
+                      <div
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                          isSelected ? 'bg-white shadow-xs' : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        <Icon className="w-5 h-5 text-gray-800" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-xs font-bold text-gray-900">{opt.label}</div>
+                        <div className="text-[11px] text-gray-500 mt-0.5 leading-snug">
+                          {opt.desc}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-            )}
+            </div>
+          )}
 
-            {categoryKey === 'CANTEEN_FOOD' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Cafeteria Facility *
-                  </label>
-                  <select
-                    value={canteenLocation}
-                    onChange={(e) => setCanteenLocation(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900"
-                  >
-                    <option value="Main Campus Student Canteen, Oluvil">
-                      Main Campus Student Canteen, Oluvil
-                    </option>
-                    <option value="Faculty of Technology Canteen">Faculty of Technology Canteen</option>
-                    <option value="Faculty of Applied Sciences Canteen, Sammanthurai">
-                      Faculty of Applied Sciences Canteen, Sammanthurai
-                    </option>
-                    <option value="Staff Cafeteria, Oluvil">Staff Cafeteria, Oluvil</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                    Specific Dining Spot / Station
-                  </label>
-                  <input
-                    type="text"
-                    value={specificRoom}
-                    onChange={(e) => setSpecificRoom(e.target.value)}
-                    placeholder="e.g. South Water Cooler or Counter #2"
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900"
-                  />
-                </div>
-              </div>
-            )}
-
-            {(categoryKey === 'CAMPUS_MAINTENANCE' || categoryKey === 'OTHER_SERVICES') && (
-              <div>
-                <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                  Campus Facility / Location Spot *
-                </label>
-                <input
-                  type="text"
-                  value={specificRoom}
-                  onChange={(e) => setSpecificRoom(e.target.value)}
-                  placeholder="e.g. Main Access Road Gate #1, Drainage near Sports Ground, Health Centre Clinic"
-                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Title & Priority */}
+          {/* Title & Urgency */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="sm:col-span-2">
               <label className="block text-xs font-bold text-gray-700 mb-1.5">
@@ -574,7 +400,11 @@ export const ReportIssue = () => {
                 maxLength={150}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Water Supply Pressure Failure in 2nd Floor Washrooms"
+                placeholder={
+                  submissionMode === 'agent'
+                    ? 'e.g. Missing reference books on 2nd floor or Water leak in Hijra hostel'
+                    : 'e.g. Projector power failure in lecture room'
+                }
                 className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:border-brand-500 text-gray-900"
               />
             </div>
@@ -586,32 +416,52 @@ export const ReportIssue = () => {
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:border-brand-500 text-gray-900"
+                className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:border-brand-500 text-gray-900 font-semibold"
               >
                 <option value="Low">Low (Routine)</option>
                 <option value="Medium">Medium (Standard)</option>
-                <option value="High">High (Disruptive)</option>
-                <option value="Critical">Critical (Safety Hazard)</option>
+                <option value="High">High (Urgent)</option>
+                <option value="Critical">Critical (Immediate Hazard)</option>
               </select>
             </div>
           </div>
 
-          {/* Detailed Description */}
+          {/* Location Spot */}
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1.5">
-              Detailed Complaint Description *
+              Specific Room / Location (Optional)
+            </label>
+            <input
+              type="text"
+              value={specificRoom}
+              onChange={(e) => setSpecificRoom(e.target.value)}
+              placeholder="e.g. Hall W201, Hijra Block B Room 304, Central Library 2nd Floor, or Student Canteen Counter 1"
+              className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:border-brand-500 text-gray-900"
+            />
+          </div>
+
+          {/* Detailed Complaint Description */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+              <span>Detailed Complaint Description *</span>
+              {submissionMode === 'agent' && (
+                <span className="text-[11px] font-semibold text-brand-600 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  Gemini AI understands natural language
+                </span>
+              )}
             </label>
             <textarea
               required
               rows={4}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Provide complete details: describe exactly what is malfunctioning, how many students are affected, when the issue began, and any safety hazards..."
+              placeholder="Describe exactly what happened or what is malfunctioning. Example: 'The books in the 3rd floor computer science section have torn and missing pages', or 'The dining hall food was stale and overpriced'..."
               className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm focus:bg-white focus:border-brand-500 text-gray-900 leading-relaxed"
             />
           </div>
 
-          {/* Image Upload */}
+          {/* Photographic Evidence */}
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1.5">
               Photographic Evidence (Optional, max 5MB)
@@ -649,13 +499,13 @@ export const ReportIssue = () => {
           </div>
 
           {/* Anonymous Option */}
-          <div className="p-4 rounded-2xl bg-campus-bg border border-gray-200 flex items-center justify-between">
+          <div className="p-4 rounded-2xl bg-gray-50 border border-gray-200 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <EyeOff className="w-5 h-5 text-gray-500" />
               <div>
                 <div className="text-xs font-bold text-gray-900">Report Anonymously</div>
                 <div className="text-[11px] text-gray-500">
-                  Hide your name from public view. Internal records remain securely auditable by administrators.
+                  Hide your name from public display. Internal records remain securely recorded.
                 </div>
               </div>
             </div>
@@ -675,8 +525,17 @@ export const ReportIssue = () => {
             type="submit"
             className="w-full py-3.5 rounded-xl bg-brand-500 hover:bg-brand-600 active:scale-98 text-white font-bold text-sm shadow-md shadow-brand-500/20 transition-all flex items-center justify-center gap-2"
           >
-            <ShieldAlert className="w-4 h-4" />
-            <span>Review Complaint Summary & Submit</span>
+            {submissionMode === 'agent' ? (
+              <>
+                <Zap className="w-4 h-4" />
+                <span>Submit with AI Agent Decision Routing</span>
+              </>
+            ) : (
+              <>
+                <ShieldAlert className="w-4 h-4" />
+                <span>Submit Targeted Complaint</span>
+              </>
+            )}
           </button>
         </form>
       </div>
@@ -691,24 +550,28 @@ export const ReportIssue = () => {
             </div>
 
             <p className="text-xs text-gray-500">
-              Please review your details before submitting to the SEUSL SmartResolve routing system.
+              Review your complaint details before sending to the SEUSL SmartResolve system.
             </p>
 
             <div className="p-4 rounded-2xl bg-gray-50 border border-gray-200 text-xs space-y-2">
               <div className="flex justify-between py-1 border-b border-gray-200">
                 <span className="text-gray-400">Reporter:</span>
                 <span className="font-semibold text-gray-900">
-                  {isAnonymous ? 'Anonymous Student' : user?.name} ({user?.registrationNumber || 'Student'})
+                  {isAnonymous ? 'Anonymous Student' : user?.name}
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-gray-200">
-                <span className="text-gray-400">Category:</span>
-                <span className="font-semibold text-gray-900">{categoryKey}</span>
+                <span className="text-gray-400">Mode:</span>
+                <span className="font-bold text-brand-600 uppercase">
+                  {submissionMode === 'agent' ? 'AI Agent Decision' : 'Manual Targeted'}
+                </span>
               </div>
-              <div className="flex justify-between py-1 border-b border-gray-200">
-                <span className="text-gray-400">Location:</span>
-                <span className="font-semibold text-gray-900">{constructLocationData().location}</span>
-              </div>
+              {submissionMode === 'manual' && (
+                <div className="flex justify-between py-1 border-b border-gray-200">
+                  <span className="text-gray-400">Destination Official:</span>
+                  <span className="font-bold text-purple-700">{targetOfficerRole}</span>
+                </div>
+              )}
               <div className="flex justify-between py-1 border-b border-gray-200">
                 <span className="text-gray-400">Title:</span>
                 <span className="font-bold text-gray-900">{title}</span>

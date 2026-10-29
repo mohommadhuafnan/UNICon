@@ -212,7 +212,7 @@ export const StaffDashboard = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with Role Title customization */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-gray-200">
         <div>
           <div className="flex items-center gap-2">
@@ -220,14 +220,22 @@ export const StaffDashboard = () => {
               <Shield className="w-5 h-5" />
             </div>
             <h1 className="text-2xl font-black text-gray-900 tracking-tight">
-              Staff Operations Portal
+              {user?.role === 'LIBRARY_OFFICER'
+                ? 'Library Complaints & Service Portal'
+                : user?.role === 'CANTEEN_MANAGER'
+                ? 'Cafeteria & Dining Complaints Portal'
+                : user?.role === 'HOSTEL_WARDEN'
+                ? 'Hostel Accommodation Grievance Hub'
+                : user?.role === 'FACULTY_OFFICER'
+                ? 'Faculty Complaints & Academic Grievance Hub'
+                : 'Staff Complaints Resolution Portal'}
             </h1>
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800">
-              {user?.role?.replace('_', ' ')}
+              {user?.department || 'SEUSL Service Unit'}
             </span>
           </div>
           <p className="text-xs text-gray-500 mt-1">
-            Scoped complaint queue for {user?.name} · {user?.department || 'SEUSL Service Unit'}
+            Scoped complaint queue for {user?.name} · {user?.university || 'SEUSL'}
           </p>
         </div>
 
@@ -337,10 +345,11 @@ export const StaffDashboard = () => {
                 <tr className="border-b border-gray-200 text-gray-400 font-semibold uppercase tracking-wider">
                   <th className="pb-3">Ticket ID & Title</th>
                   <th className="pb-3">Student & Reg No</th>
+                  <th className="pb-3">Date & Time</th>
                   <th className="pb-3">Location Spot</th>
                   <th className="pb-3">Priority</th>
                   <th className="pb-3">Current Status</th>
-                  <th className="pb-3 text-right">Operational Actions</th>
+                  <th className="pb-3 text-right">Officer Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -352,7 +361,7 @@ export const StaffDashboard = () => {
                       </div>
                       <div className="font-bold text-gray-900 line-clamp-1">{c.title}</div>
                       <div className="text-[10px] text-gray-400">
-                        {c.category} · {new Date(c.createdAt).toLocaleDateString()}
+                        {c.category}
                       </div>
                     </td>
                     <td className="py-3.5">
@@ -361,6 +370,14 @@ export const StaffDashboard = () => {
                       </div>
                       <div className="font-mono text-[10px] text-gray-400">
                         {c.studentRegistrationNumber || c.reporter?.studentId || '-'}
+                      </div>
+                    </td>
+                    <td className="py-3.5 whitespace-nowrap">
+                      <div className="font-semibold text-gray-700 text-xs">
+                        {new Date(c.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </div>
+                      <div className="text-[10px] text-gray-400">
+                        {new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </td>
                     <td className="py-3.5 text-gray-600 max-w-[180px] truncate">
@@ -379,6 +396,22 @@ export const StaffDashboard = () => {
                           className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold border border-blue-200"
                         >
                           Acknowledge
+                        </button>
+                      )}
+
+                      {c.status !== 'RESOLVED' && c.status !== 'Resolved' && (
+                        <button
+                          onClick={() => {
+                            setSelectedComplaint(c);
+                            setModalStatus('RESOLVED');
+                            setModalNote('Issue inspected, approved, and marked as resolved.');
+                            setResolutionDetails('Grievance resolved and verified on site.');
+                            setActiveModal('status');
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs transition-all"
+                          title="Approve and mark resolved"
+                        >
+                          ✓ Approve & Resolve
                         </button>
                       )}
 

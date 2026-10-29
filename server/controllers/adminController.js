@@ -9,10 +9,7 @@ import AIExecutionLog from '../models/AIExecutionLog.js';
 import { ingestKnowledgeDocument } from '../services/ragService.js';
 import { detectRoutingRuleConflicts } from '../services/routingEngine.js';
 import { logAuditEvent } from '../services/auditService.js';
-
-// @desc    Get complete real administrative overview metrics
-// @route   GET /api/admin/stats
-// @access  Private (Admin only)
+// @desc Get complete real administrative overview metric
 export const getAdminStats = async (req, res, next) => {
   try {
     const [

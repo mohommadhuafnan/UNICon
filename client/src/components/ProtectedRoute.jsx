@@ -46,10 +46,19 @@ export const ProtectedRoute = ({ children, roles }) => {
           <p className="text-gray-600 mb-6 text-sm">
             Your current account role (<span className="font-semibold text-gray-800 uppercase">{user.role}</span>) does not have authorization to view this management section. Required role: {roles.join(' or ')}.
           </p>
-          <Navigate to="/dashboard" replace />
+          <Navigate to={isStaff ? "/staff" : isAdmin ? "/admin" : "/dashboard"} replace />
         </div>
       );
     }
+  }
+
+  // If staff/admin tries to land on general root dashboard without specifying roles, redirect to staff
+  if (!roles && isStaff && location.pathname === '/dashboard') {
+    return <Navigate to="/staff" replace />;
+  }
+
+  if (!roles && isAdmin && location.pathname === '/dashboard') {
+    return <Navigate to="/admin" replace />;
   }
 
   return children;

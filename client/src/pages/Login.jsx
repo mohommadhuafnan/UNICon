@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { Layers, Lock, Mail, ArrowRight, ArrowLeft, Shield, Sparkles } from 'lucide-react';
+import { Layers, Lock, Mail, ArrowRight, ArrowLeft } from 'lucide-react';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
@@ -10,7 +10,7 @@ export const Login = () => {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const { login, demoLogin } = useAuth();
+  const { login } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,27 +38,6 @@ export const Login = () => {
       }
     } catch (err) {
       setErrorMessage(err.response?.data?.message || 'Login failed. Please check your credentials.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleQuickDemo = async (role) => {
-    try {
-      setSubmitting(true);
-      setErrorMessage('');
-      const res = await demoLogin(role);
-      showToast(`Logged in as ${res.user.name} (${res.user.role})`, 'success');
-      if (['SUPER_ADMIN', 'UNIVERSITY_ADMIN', 'admin'].includes(res.user.role)) {
-        navigate('/admin', { replace: true });
-      } else if (res.user.role !== 'STUDENT' && res.user.role !== 'student') {
-        navigate('/staff', { replace: true });
-      } else {
-        navigate('/dashboard', { replace: true });
-      }
-    } catch (err) {
-      const msg = err.response?.data?.message || (err.response?.status ? `Server error (HTTP ${err.response.status})` : err.message);
-      setErrorMessage(msg || 'Failed to log in with demo account.');
     } finally {
       setSubmitting(false);
     }
@@ -145,90 +124,6 @@ export const Login = () => {
             )}
           </button>
         </form>
-
-        {/* 1-Click SEUSL Role Switchers */}
-        <div className="pt-4 border-t border-gray-100">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-brand-500" />
-              1-Click Verified Role Demonstration:
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-left">
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('STUDENT')}
-              className="p-2 rounded-xl border border-gray-200 hover:border-brand-300 hover:bg-orange-50/50 transition-all"
-            >
-              <div className="text-[11px] font-bold text-gray-900">Student</div>
-              <div className="text-[10px] text-gray-400 truncate">Kasun Perera (FOT)</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('SUPER_ADMIN')}
-              className="p-2 rounded-xl border border-gray-200 hover:border-red-300 hover:bg-red-50/50 transition-all"
-            >
-              <div className="text-[11px] font-bold text-red-700">Super Admin</div>
-              <div className="text-[10px] text-gray-400 truncate">SEUSL Administrator</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('FACULTY_OFFICER')}
-              className="p-2 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all"
-            >
-              <div className="text-[11px] font-bold text-blue-700">Faculty Officer</div>
-              <div className="text-[10px] text-gray-400 truncate">Dr. M. A. Fathima</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('HOSTEL_WARDEN')}
-              className="p-2 rounded-xl border border-gray-200 hover:border-amber-300 hover:bg-amber-50/50 transition-all"
-            >
-              <div className="text-[11px] font-bold text-amber-700">Hostel Warden</div>
-              <div className="text-[10px] text-gray-400 truncate">Hijra Hostel Warden</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('MAINTENANCE_OFFICER')}
-              className="p-2 rounded-xl border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/50 transition-all"
-            >
-              <div className="text-[11px] font-bold text-emerald-700">Maintenance</div>
-              <div className="text-[10px] text-gray-400 truncate">Works Engineer</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('CANTEEN_MANAGER')}
-              className="p-2 rounded-xl border border-gray-200 hover:border-purple-300 hover:bg-purple-50/50 transition-all"
-            >
-              <div className="text-[11px] font-bold text-purple-700">Canteen Manager</div>
-              <div className="text-[10px] text-gray-400 truncate">Cafeteria Supervisor</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('LIBRARY_OFFICER')}
-              className="p-2 rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all"
-            >
-              <div className="text-[11px] font-bold text-indigo-700">Library Officer</div>
-              <div className="text-[10px] text-gray-400 truncate">Senior Librarian</div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('STUDENT_WELFARE_OFFICER')}
-              className="p-2 rounded-xl border border-gray-200 hover:border-rose-300 hover:bg-rose-50/50 transition-all"
-            >
-              <div className="text-[11px] font-bold text-rose-700">Welfare Officer</div>
-              <div className="text-[10px] text-gray-400 truncate">Senior Counselor</div>
-            </button>
-          </div>
-        </div>
 
         <div className="text-center text-xs text-gray-500">
           New Student?{' '}

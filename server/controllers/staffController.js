@@ -15,39 +15,34 @@ export const buildStaffScopedQuery = (user) => {
     return {};
   }
 
-  // Faculty Officer: only complaints within their assigned faculties
+  // Faculty Officer: only complaints within their assigned faculties or targeted to FACULTY_OFFICER
   if (role === 'FACULTY_OFFICER') {
-    if (user.assignedFaculties && user.assignedFaculties.length > 0) {
-      return {
-        $or: [
-          { faculty: { $in: user.assignedFaculties } },
-          { 'locationDetails.facultyName': { $in: user.assignedFaculties } },
-        ],
-      };
-    }
-    return { category: 'FACULTY_RELATED' };
-  }
+    const facultyList = user.assignedFaculties && user.assignedFaculties.length > 0
+      ? user.assignedFaculties
+      : [user.faculty || 'Faculty of Technology'];
 
-  // Hostel Warden & Sub-Warden: only complaints for their assigned hostels
-  if (role === 'HOSTEL_WARDEN' || role === 'HOSTEL_SUB_WARDEN') {
-    const baseQuery = {
+    return {
       $or: [
-        { category: 'HOSTEL_ACCOMMODATION' },
-        { category: 'Hostel and Accommodation' },
+        { 'routingDecision.targetRole': 'FACULTY_OFFICER' },
+        { 'routingDecision.assignedStaff': user._id },
+        { category: 'FACULTY_RELATED' },
+        { faculty: { $in: facultyList } },
+        { 'locationDetails.facultyName': { $in: facultyList } },
       ],
     };
-    if (user.assignedHostels && user.assignedHostels.length > 0) {
-      const hostelRegexes = user.assignedHostels.map((h) => new RegExp(h, 'i'));
-      baseQuery.$and = [
-        {
-          $or: [
-            { 'locationDetails.hostelName': { $in: user.assignedHostels } },
-            { location: { $in: hostelRegexes } },
-          ],
-        },
-      ];
-    }
-    return baseQuery;
+  }
+
+  // Hostel Warden & Sub-Warden: complaints for hostel accommodation or targeted to HOSTEL_WARDEN
+  if (role === 'HOSTEL_WARDEN' || role === 'HOSTEL_SUB_WARDEN') {
+    return {
+      $or: [
+        { 'routingDecision.targetRole': 'HOSTEL_WARDEN' },
+        { 'routingDecision.assignedStaff': user._id },
+        { category: 'HOSTEL_ACCOMMODATION' },
+        { category: 'Hostel and Accommodation' },
+        { 'routingDecision.assignedUnit': /hostel/i },
+      ],
+    };
   }
 
   // Maintenance Officer: maintenance department queue and general repairs
@@ -61,20 +56,24 @@ export const buildStaffScopedQuery = (user) => {
     };
   }
 
-  // Library Officer: library services queue
+  // Library Officer: library services queue or targeted to LIBRARY_OFFICER
   if (role === 'LIBRARY_OFFICER') {
     return {
       $or: [
+        { 'routingDecision.targetRole': 'LIBRARY_OFFICER' },
+        { 'routingDecision.assignedStaff': user._id },
         { category: 'LIBRARY' },
         { 'routingDecision.assignedUnit': /library/i },
       ],
     };
   }
 
-  // Canteen Manager: cafeteria services queue
+  // Canteen Manager: cafeteria services queue or targeted to CANTEEN_MANAGER
   if (role === 'CANTEEN_MANAGER') {
     return {
       $or: [
+        { 'routingDecision.targetRole': 'CANTEEN_MANAGER' },
+        { 'routingDecision.assignedStaff': user._id },
         { category: 'CANTEEN_FOOD' },
         { 'routingDecision.assignedUnit': /cafeteria|canteen/i },
       ],
