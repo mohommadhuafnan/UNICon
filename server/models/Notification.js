@@ -13,6 +13,8 @@ const notificationSchema = new mongoose.Schema(
       enum: [
         'issue_status',
         'issue_response',
+        'issue_assigned',
+        'clarification_needed',
         'announcement',
         'opportunity_deadline',
         'event_reminder',
