@@ -415,7 +415,7 @@ export const createIssue = async (req, res, next) => {
       ],
     });
 
-    // 4. Create in-app notification for student
+    // 4. Create in-app notification for the submitting student
     await Notification.create({
       recipient: req.user.id,
       type: 'issue_status',
@@ -424,15 +424,73 @@ export const createIssue = async (req, res, next) => {
       link: `/campuscare/${complaint._id}`,
     });
 
-    // 5. Notify assigned staff if specific staff identified
-    if (routing.assignedStaff) {
-      await Notification.create({
-        recipient: routing.assignedStaff,
-        type: 'issue_assigned',
-        title: `New Ticket Assigned: ${complaint.ticketNumber}`,
-        message: `Complaint "${complaint.title}" at ${complaint.location} requires your attention.`,
-        link: `/campuscare/${complaint._id}`,
-      });
+    // 5. Precise Role-Scoped Notification Dispatch:
+    // Only notify officers responsible for this specific complaint role / unit (e.g., LIBRARY_OFFICER, HOSTEL_WARDEN, etc.)
+    const targetRole = routing.targetRole;
+    let targetOfficerQuery = { accountStatus: 'active' };
+
+    if (targetRole) {
+      targetOfficerQuery.role = targetRole;
+
+      // Narrow down if faculty-specific
+      if (targetRole === 'FACULTY_OFFICER') {
+        const studentFaculty = req.user.faculty || parsedLocationDetails.facultyName;
+        if (studentFaculty) {
+          targetOfficerQuery.$or = [
+            { assignedFaculties: studentFaculty },
+            { faculty: studentFaculty },
+          ];
+        }
+      }
+
+      // Narrow down if hostel-specific
+      if (targetRole === 'HOSTEL_WARDEN') {
+        const hostelName = parsedLocationDetails.hostelName;
+        if (hostelName) {
+          targetOfficerQuery.$or = [
+            { assignedHostels: hostelName },
+            { assignedHostels: { $in: [hostelName] } },
+          ];
+        }
+      }
+    } else if (routing.assignedStaff) {
+      targetOfficerQuery._id = routing.assignedStaff;
+    } else {
+      // Fallback: match by unit name keywords
+      if (/library/i.test(routing.assignedUnit)) {
+        targetOfficerQuery.role = 'LIBRARY_OFFICER';
+      } else if (/hostel/i.test(routing.assignedUnit)) {
+        targetOfficerQuery.role = 'HOSTEL_WARDEN';
+      } else if (/cafeteria|canteen/i.test(routing.assignedUnit)) {
+        targetOfficerQuery.role = 'CANTEEN_MANAGER';
+      } else if (/faculty/i.test(routing.assignedUnit)) {
+        targetOfficerQuery.role = 'FACULTY_OFFICER';
+      } else {
+        targetOfficerQuery.role = 'MAINTENANCE_OFFICER';
+      }
+    }
+
+    // Retrieve the exact responsible officers for this domain
+    let officersToNotify = await User.find(targetOfficerQuery).select('_id name role email');
+
+    // If query with faculty/hostel sub-filter returned 0, fallback to any active officer of that exact role
+    if (officersToNotify.length === 0 && targetRole) {
+      officersToNotify = await User.find({ role: targetRole, accountStatus: 'active' }).select('_id name role email');
+    }
+
+    // Deliver notification strictly and exclusively to the targeted officer(s)
+    if (officersToNotify.length > 0) {
+      await Promise.all(
+        officersToNotify.map((officer) =>
+          Notification.create({
+            recipient: officer._id,
+            type: 'issue_assigned',
+            title: `New ${targetRole || routing.assignedUnit} Complaint: ${complaint.ticketNumber}`,
+            message: `New student complaint "${complaint.title}" filed at ${complaint.location} requires your review and resolution.`,
+            link: `/campuscare/${complaint._id}`,
+          })
+        )
+      );
     }
 
     await logAuditEvent({
