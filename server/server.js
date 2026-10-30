@@ -18,6 +18,7 @@ import issueRoutes from './routes/issueRoutes.js';
 import staffRoutes from './routes/staffRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import agentRoutes from './routes/agentRoutes.js';
+import { attachLiveAgent } from './services/liveAgentService.js';
 import metadataRoutes from './routes/metadataRoutes.js';
 import announcementRoutes from './routes/announcementRoutes.js';
 import opportunityRoutes from './routes/opportunityRoutes.js';
@@ -143,9 +144,11 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`[UniConnect SmartResolve API] Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
   });
+  // Realtime voice agent (WebSocket). Not available on serverless hosts such as Vercel.
+  attachLiveAgent(server);
 }
 
 export default app;

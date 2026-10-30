@@ -7,6 +7,7 @@ import { DEPARTMENTS, PRIORITIES } from '../services/departmentRegistry.js';
 
 const MAX_SESSION_IMAGES = 10;
 const MAX_TEXT_LENGTH = 2000;
+export const STALE_LOCK_MS = 10 * 60 * 1000;
 
 const SIGNATURES = [
   (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff, // jpeg
@@ -51,7 +52,7 @@ const draftSummary = (draft) =>
     ? { department: DEPARTMENTS[draft.departmentKey]?.label, priority: draft.priority }
     : null;
 
-const submittedSummary = (complaint) => ({
+export const submittedSummary = (complaint) => ({
   complaintId: complaint._id,
   ticketNumber: complaint.ticketNumber,
   title: complaint.title,
@@ -80,7 +81,7 @@ const validateReport = (r) => {
   return '';
 };
 
-const fileReport = async ({ session, user, ip }) => {
+export const fileReport = async ({ session, user, ip }) => {
   const r = session.draft;
   const problem = validateReport(r);
   if (problem) {
@@ -158,9 +159,15 @@ const fileReport = async ({ session, user, ip }) => {
 };
 
 /** Atomically take the session for one turn; returns the session or a {status, message} rejection. */
-const acquireSession = async (sessionId, userId) => {
+export const acquireSession = async (sessionId, userId) => {
   const session = await AgentReportSession.findOneAndUpdate(
-    { _id: sessionId, user: userId, status: 'active', busy: false },
+    {
+      _id: sessionId,
+      user: userId,
+      status: 'active',
+      // a lock older than STALE_LOCK_MS belongs to a crashed/abandoned turn
+      $or: [{ busy: false }, { updatedAt: { $lt: new Date(Date.now() - STALE_LOCK_MS) } }],
+    },
     { $set: { busy: true } },
     { new: true }
   );
