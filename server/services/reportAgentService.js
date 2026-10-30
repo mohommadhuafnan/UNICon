@@ -50,12 +50,7 @@ const RESPONSE_SCHEMA = {
   required: ['nextAction', 'reply', 'report'],
 };
 
-const buildSystemPrompt = ({ isAnonymous, faculty }) => `You are the UniConnect Campus Assistant for South Eastern University of Sri Lanka (SEUSL). Students describe campus problems to you in a chat. You understand the problem, decide which university department must handle it, judge how urgent it is, collect only the missing details, and prepare a report that is filed automatically once it is complete.
-
-DEPARTMENTS (departmentKey must be one of these, or UNKNOWN if you genuinely cannot tell):
-${departmentPromptList()}
-
-ROUTING
+export const ROUTING_AND_URGENCY_RULES = `ROUTING
 - Decide by understanding who is responsible for resolving the problem in context, not by matching words. "Room" in a hostel vs. a lecture room, "water" in a canteen vs. a hostel: reason about the situation.
 - departmentConfidence (0-1) measures ONLY how sure you are of the department. It is independent of urgency.
 - If two departments are plausible and the message does not disambiguate (for example "the fan is broken in my room" without saying hostel or lecture room), ask a follow-up instead of guessing.
@@ -65,7 +60,14 @@ URGENCY (priority) - judged from the actual issue, impact and context, never fro
 - High: serious disruption or probable harm: no water/electricity for a day or more in a hostel, many students affected, exam/deadline-blocking failure, security threats without immediate danger.
 - Medium: real but routine fault with a workaround, one or a few people affected.
 - Low: minor inconvenience, cosmetic issue, suggestion.
-Set urgencyReasoning to one short sentence citing the concrete facts you used.
+Set urgencyReasoning to one short sentence citing the concrete facts you used.`;
+
+const buildSystemPrompt = ({ isAnonymous, faculty }) => `You are the UniConnect Campus Assistant for South Eastern University of Sri Lanka (SEUSL). Students describe campus problems to you in a chat. You understand the problem, decide which university department must handle it, judge how urgent it is, collect only the missing details, and prepare a report that is filed automatically once it is complete.
+
+DEPARTMENTS (departmentKey must be one of these, or UNKNOWN if you genuinely cannot tell):
+${departmentPromptList()}
+
+${ROUTING_AND_URGENCY_RULES}
 
 CONVERSATION RULES
 - Ask a follow-up (nextAction=ASK_FOLLOW_UP) only when something needed for an accurate report is missing: an unclear department, a location that officers need, or an impact detail that would change priority. One focused question at a time. Provide 2-5 short suggestedAnswers (each under 60 characters) that the student can tap; the student may also type their own answer.
@@ -153,7 +155,35 @@ const norm = (s = '') =>
     .replace(/[^a-z0-9඀-෿஀-௿ ]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-const clamp = (s, n) => String(s || '').trim().slice(0, n);
+export const clamp = (s, n) => String(s || '').trim().slice(0, n);
+
+/** Coerces a model-produced report into validated, bounded values (unknown departments/priorities become ''). */
+export const normalizeReport = (r = {}) => {
+  const dept = DEPARTMENTS[r.departmentKey] ? r.departmentKey : '';
+  const confidence = Math.max(0, Math.min(1, Number(r.departmentConfidence) || 0));
+  return {
+    title: clamp(r.title, 150),
+    description: clamp(r.description, 5000),
+    departmentKey: dept,
+    departmentConfidence: dept ? confidence : 0,
+    departmentReasoning: clamp(r.departmentReasoning, 500),
+    priority: PRIORITIES.includes(r.priority) ? r.priority : '',
+    urgencyReasoning: clamp(r.urgencyReasoning, 400),
+    location: clamp(r.location, 200),
+    specificLocation: clamp(r.specificLocation, 200),
+    hostelName: HOSTEL_NAMES.includes(r.hostelName) ? r.hostelName : '',
+    missingInformation: (r.missingInformation || []).map((x) => clamp(x, 120)).filter(Boolean).slice(0, 6),
+  };
+};
+
+/** Whether a normalised report has the essentials and a department the model is confident about. */
+export const assessReport = (report) => {
+  const essentials = Boolean(
+    report.title.length >= 5 && report.description.length >= 20 && report.departmentKey && report.priority
+  );
+  const lowConfidence = Boolean(report.departmentKey && report.departmentConfidence < MIN_DEPARTMENT_CONFIDENCE);
+  return { essentials, lowConfidence };
+};
 
 /**
  * Runs one assistant turn. Returns a validated decision:
@@ -189,31 +219,13 @@ export const runReportTurn = async ({
   }
 
   const out = await callGemini(body);
-  const r = out.report || {};
-  const dept = DEPARTMENTS[r.departmentKey] ? r.departmentKey : '';
-  const confidence = Math.max(0, Math.min(1, Number(r.departmentConfidence) || 0));
-
-  const report = {
-    title: clamp(r.title, 150),
-    description: clamp(r.description, 5000),
-    departmentKey: dept,
-    departmentConfidence: dept ? confidence : 0,
-    departmentReasoning: clamp(r.departmentReasoning, 500),
-    priority: PRIORITIES.includes(r.priority) ? r.priority : '',
-    urgencyReasoning: clamp(r.urgencyReasoning, 400),
-    location: clamp(r.location, 200),
-    specificLocation: clamp(r.specificLocation, 200),
-    hostelName: HOSTEL_NAMES.includes(r.hostelName) ? r.hostelName : '',
-    missingInformation: (r.missingInformation || []).map((x) => clamp(x, 120)).filter(Boolean).slice(0, 6),
-  };
+  const report = normalizeReport(out.report);
 
   const reply = clamp(out.reply, 1200) || 'Thanks, let me look into that.';
   if (out.nextAction === 'CHAT_ONLY' && !report.title) return { action: 'CHAT', reply, report };
 
   // ---- backend validation of the (possibly final) report ----
-  const essentials =
-    report.title.length >= 5 && report.description.length >= 20 && report.departmentKey && report.priority;
-  const lowConfidence = report.departmentKey && report.departmentConfidence < MIN_DEPARTMENT_CONFIDENCE;
+  const { essentials, lowConfidence } = assessReport(report);
 
   const asksLeft = MAX_FOLLOW_UPS - askedQuestions.length;
   let followUp = null;

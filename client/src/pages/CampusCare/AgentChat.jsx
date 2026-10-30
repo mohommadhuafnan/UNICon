@@ -15,7 +15,11 @@ import {
   RotateCcw,
   RefreshCw,
   Route,
+  Mic,
+  MicOff,
+  PhoneOff,
 } from 'lucide-react';
+import { useVoiceAgent } from './useVoiceAgent';
 
 const MAX_PER_MESSAGE = 5;
 const MAX_TOTAL = 10;
@@ -64,6 +68,41 @@ const AssistantAvatar = () => (
   </div>
 );
 
+const VOICE_LABEL = {
+  connecting: 'Connecting…',
+  listening: 'Listening — just speak',
+  speaking: 'Speaking…',
+};
+
+/** Pulsing orb that follows the loudness of whoever is talking (updated via rAF, no re-renders). */
+const VoiceOrb = ({ getLevel, status }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    let raf;
+    let smooth = 0;
+    const tick = () => {
+      smooth += (getLevel() - smooth) * 0.25;
+      if (ref.current) ref.current.style.transform = `scale(${1 + smooth * 0.9})`;
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(raf);
+  }, [getLevel]);
+  const color =
+    status === 'speaking' ? 'from-brand-400 to-brand-600' : status === 'connecting' ? 'from-gray-300 to-gray-400' : 'from-emerald-400 to-emerald-600';
+  return (
+    <div className="relative w-12 h-12 flex items-center justify-center flex-shrink-0">
+      <div ref={ref} className={`absolute inset-1 rounded-full bg-gradient-to-br ${color} opacity-30 transition-colors`} />
+      <div className={`relative w-8 h-8 rounded-full bg-gradient-to-br ${color} flex items-center justify-center text-white shadow-md transition-colors`}>
+        <Mic className="w-4 h-4" />
+      </div>
+    </div>
+  );
+};
+
+// Realtime voice is off unless VITE_VOICE_AGENT_ENABLED=true at build/dev start.
+const VOICE_ENABLED = import.meta.env.VITE_VOICE_AGENT_ENABLED === 'true';
+
 const SESSION_KEY = (userId) => `uniconnect_agent_session_${userId}`;
 
 export const AgentChat = () => {
@@ -85,9 +124,56 @@ export const AgentChat = () => {
   const fileInputRef = useRef(null);
   const sendingRef = useRef(false);
 
+  // ---- realtime voice (Gemini Live) ----
+  const liveIds = useRef({ user: null, assistant: null });
+  const submittedInVoice = useRef(false);
+  const voiceRef = useRef(null);
+  const [voiceOptions, setVoiceOptions] = useState(null);
+
+  const appendTranscript = (role, text) => {
+    if (role === 'user') setVoiceOptions(null);
+    const existing = liveIds.current[role];
+    if (existing) {
+      setMessages((prev) => prev.map((m) => (m.id === existing ? { ...m, text: m.text + text } : m)));
+    } else {
+      const id = `live-${role}-${Date.now()}-${Math.random()}`;
+      liveIds.current[role] = id;
+      setMessages((prev) => [...prev, { id, role, text, images: [] }]);
+    }
+  };
+
+  const voice = useVoiceAgent({
+    onReady: (m) => {
+      setSessionId(m.sessionId);
+      if (user) sessionStorage.setItem(SESSION_KEY(user._id), m.sessionId);
+    },
+    onTranscript: appendTranscript,
+    onTurnEnd: (kind) => {
+      liveIds.current = { user: null, assistant: null };
+      // once the report is filed, end the call after the assistant finished confirming it
+      if (kind === 'turnComplete' && submittedInVoice.current) voiceRef.current?.stop(true);
+    },
+    onOptions: (o) => setVoiceOptions(o),
+    onSubmitted: (data) => {
+      submittedInVoice.current = true;
+      setSubmitted(data);
+      setVoiceOptions(null);
+      if (user) sessionStorage.removeItem(SESSION_KEY(user._id));
+      setTimeout(() => voiceRef.current?.stop(true), 20000); // safety net
+    },
+    onNotice: (m) => setError(m),
+    onError: (m) => setError(m),
+    onClosed: () => {
+      liveIds.current = { user: null, assistant: null };
+    },
+  });
+  voiceRef.current = voice;
+  const voiceActive = voice.status !== 'idle';
+
   const totalImages = messages.reduce((n, m) => n + (m.role === 'user' ? m.images?.length || 0 : 0), 0);
   const lastMessage = messages[messages.length - 1];
-  const activeFollowUp = !submitted && !sending && lastMessage?.role === 'assistant' ? lastMessage.followUp : null;
+  const textFollowUp = !submitted && !sending && lastMessage?.role === 'assistant' ? lastMessage.followUp : null;
+  const activeFollowUp = voiceActive ? (voiceOptions ? { suggestedAnswers: voiceOptions.options } : null) : textFollowUp;
 
   // Restore an unfinished conversation after a refresh
   useEffect(() => {
@@ -252,7 +338,60 @@ export const AgentChat = () => {
     }
   };
 
+  const addVoiceImages = (files) => {
+    let problem = '';
+    for (const file of files) {
+      if (!ALLOWED.includes(file.type)) problem = 'Only JPG, PNG, WebP or GIF images are supported.';
+      else if (file.size > MAX_BYTES) problem = 'Each image must be smaller than 5MB.';
+      else if (totalImages >= MAX_TOTAL) problem = `A report can include at most ${MAX_TOTAL} images.`;
+      else {
+        voice.sendImage(file);
+        setMessages((prev) => [
+          ...prev,
+          { id: `img-${Date.now()}-${Math.random()}`, role: 'user', text: '', images: [{ url: URL.createObjectURL(file) }] },
+        ]);
+      }
+    }
+    setError(problem);
+  };
+
+  // Ctrl+V of images anywhere on the page while a voice call is active
+  useEffect(() => {
+    if (!voiceActive) return undefined;
+    const onPaste = (e) => {
+      const files = Array.from(e.clipboardData?.items || [])
+        .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
+        .map((it) => it.getAsFile())
+        .filter(Boolean);
+      if (files.length) addVoiceImages(files);
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const startVoice = () => {
+    setError('');
+    submittedInVoice.current = false;
+    voice.start({ sessionId, anonymous });
+  };
+
+  const toggleAnonymous = () => {
+    const next = !anonymous;
+    setAnonymous(next);
+    if (voiceActive) voice.sendAnonymous(next);
+  };
+
+  const pickOption = (a) => {
+    if (voiceActive) {
+      setVoiceOptions(null);
+      setMessages((prev) => [...prev, { id: `opt-${Date.now()}`, role: 'user', text: a, images: [] }]);
+      voice.sendText(a);
+    } else send({ text: a, files: [] });
+  };
+
   const reset = () => {
+    voice.stop(false);
+    setVoiceOptions(null);
     pending.forEach((p) => URL.revokeObjectURL(p.url));
     if (user) sessionStorage.removeItem(SESSION_KEY(user._id));
     setSessionId(null);
@@ -318,6 +457,15 @@ export const AgentChat = () => {
               Describe the problem in your own words. I'll work out which department should handle it, how urgent it is, and file the report for you.
             </p>
             <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-xl">
+              {VOICE_ENABLED && (
+              <button
+                type="button"
+                onClick={startVoice}
+                className="sm:col-span-2 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-gray-900 hover:bg-gray-700 text-white text-xs font-bold shadow-sm transition-colors"
+              >
+                <Mic className="w-4 h-4" /> Talk to the assistant
+              </button>
+              )}
               {STARTERS.map((s) => (
                 <button
                   key={s}
@@ -384,7 +532,7 @@ export const AgentChat = () => {
                 <button
                   key={a}
                   type="button"
-                  onClick={() => send({ text: a, files: [] })}
+                  onClick={() => pickOption(a)}
                   className="px-3.5 py-2 rounded-full border border-brand-200 bg-white text-xs font-semibold text-brand-700 hover:bg-brand-500 hover:text-white hover:border-brand-500 transition-all shadow-sm"
                 >
                   {a}
@@ -511,7 +659,7 @@ export const AgentChat = () => {
             <div className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium">{error}</div>
           )}
 
-          {pending.length > 0 && (
+          {pending.length > 0 && !voiceActive && (
             <div className="flex flex-wrap gap-2">
               {pending.map((p) => (
                 <div key={p.id} className="relative group">
@@ -529,6 +677,47 @@ export const AgentChat = () => {
             </div>
           )}
 
+          {voiceActive ? (
+            <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gradient-to-r from-gray-50 to-white px-3 py-2.5">
+              <VoiceOrb getLevel={voice.getLevel} status={voice.status} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-gray-900">{voice.muted ? 'Microphone muted' : VOICE_LABEL[voice.status]}</div>
+                <div className="text-[11px] text-gray-500">Talk naturally, interrupt any time. Ctrl+V pastes photos.</div>
+              </div>
+              <button type="button" onClick={() => fileInputRef.current?.click()} title="Attach images" className="p-2 rounded-xl text-gray-500 hover:text-brand-600 hover:bg-brand-50">
+                <ImagePlus className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={toggleAnonymous}
+                aria-pressed={anonymous}
+                title="Report without sharing your identity"
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${anonymous ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
+              >
+                <EyeOff className="w-4 h-4" />
+                <span className="hidden sm:inline">Anonymous</span>
+              </button>
+              <button
+                type="button"
+                onClick={voice.toggleMute}
+                aria-pressed={voice.muted}
+                title={voice.muted ? 'Unmute microphone' : 'Mute microphone'}
+                className={`p-2.5 rounded-xl transition-colors ${voice.muted ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+              >
+                {voice.muted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => voice.stop(false)}
+                aria-label="End voice conversation"
+                title="End voice conversation"
+                className="p-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white shadow-sm"
+              >
+                <PhoneOff className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+          <>
           <div className="flex items-end gap-2 rounded-2xl border border-gray-200 bg-gray-50/80 focus-within:bg-white focus-within:border-brand-300 focus-within:ring-4 focus-within:ring-brand-100 transition-all px-2 py-2">
             <button
               type="button"
@@ -546,7 +735,7 @@ export const AgentChat = () => {
               multiple
               className="hidden"
               onChange={(e) => {
-                addFiles(Array.from(e.target.files || []));
+                (voiceActive ? addVoiceImages : addFiles)(Array.from(e.target.files || []));
                 e.target.value = '';
               }}
             />
@@ -567,7 +756,7 @@ export const AgentChat = () => {
 
             <button
               type="button"
-              onClick={() => setAnonymous((a) => !a)}
+              onClick={toggleAnonymous}
               disabled={sending}
               aria-pressed={anonymous}
               title="Report without sharing your identity"
@@ -578,6 +767,19 @@ export const AgentChat = () => {
               <EyeOff className="w-4 h-4" />
               <span className="hidden sm:inline">Anonymous</span>
             </button>
+
+            {VOICE_ENABLED && (
+            <button
+              type="button"
+              onClick={startVoice}
+              disabled={sending}
+              aria-label="Talk to the assistant"
+              title="Talk to the assistant"
+              className="p-2.5 rounded-xl bg-gray-900 hover:bg-gray-700 text-white shadow-sm disabled:opacity-40 transition-colors"
+            >
+              <Mic className="w-4 h-4" />
+            </button>
+            )}
 
             <button
               type="button"
@@ -592,6 +794,8 @@ export const AgentChat = () => {
           <div className="text-[10px] text-gray-400 text-center">
             Enter to send · Shift+Enter for a new line · Ctrl+V to paste images (up to {MAX_PER_MESSAGE} per message)
           </div>
+          </>
+          )}
         </div>
       )}
     </div>
