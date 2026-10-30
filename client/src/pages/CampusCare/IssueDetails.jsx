@@ -232,6 +232,10 @@ export const IssueDetails = () => {
     issue.reporter === user._id
   );
 
+  const evidenceUrls = [
+    ...new Set([...(issue?.attachments || []).map((a) => a.url), issue?.imageUrl].filter(Boolean)),
+  ];
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto space-y-6 animate-pulse py-8">
@@ -412,17 +416,23 @@ export const IssueDetails = () => {
         </div>
 
         {/* Photographic Evidence */}
-        {issue.imageUrl && (
+        {evidenceUrls.length > 0 && (
           <div className="space-y-2">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-              Photographic Evidence
+              Photographic Evidence{evidenceUrls.length > 1 ? ` (${evidenceUrls.length})` : ''}
             </h3>
-            <div className="max-w-lg rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-gray-50">
-              <img
-                src={issue.imageUrl}
-                alt={issue.title}
-                className="w-full h-auto object-cover max-h-96"
-              />
+            <div className={evidenceUrls.length > 1 ? 'grid grid-cols-2 sm:grid-cols-3 gap-3' : 'max-w-lg'}>
+              {evidenceUrls.map((url) => (
+                <a
+                  key={url}
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block rounded-2xl overflow-hidden border border-gray-200 shadow-sm bg-gray-50"
+                >
+                  <img src={url} alt={issue.title} className="w-full h-auto object-cover max-h-96" />
+                </a>
+              ))}
             </div>
           </div>
         )}

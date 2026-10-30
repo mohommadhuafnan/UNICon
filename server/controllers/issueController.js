@@ -1,3 +1,4 @@
+import { anonymizeComplaint } from '../utils/anonymity.js';
 import Complaint from '../models/Complaint.js';
 import IssueSupport from '../models/IssueSupport.js';
 import Notification from '../models/Notification.js';
@@ -119,24 +120,19 @@ export const getIssues = async (req, res, next) => {
       userSupportedSet = new Set(supports.map((s) => s.issue.toString()));
     }
 
-    // Enrich issues with hasSupported and mask anonymous reporter for public/other students
+    // Enrich issues with hasSupported; anonymous reporters are masked for everyone but the owner
     const isStaffOrAdmin = req.user && req.user.role !== 'STUDENT';
 
     const enrichedIssues = issues.map((issue) => {
-      let reporterInfo = issue.reporter;
-      if (issue.isAnonymous && !isStaffOrAdmin) {
-        reporterInfo = { name: 'Anonymous Student', role: 'STUDENT' };
-      }
+      const visibleIssue = anonymizeComplaint(issue, req.user);
 
       // Hide confidential internal notes from students
-      const visibleIssue = { ...issue };
       if (!isStaffOrAdmin) {
         delete visibleIssue.internalNotes;
       }
 
       return {
         ...visibleIssue,
-        reporter: reporterInfo,
         hasSupported: userSupportedSet.has(issue._id.toString()),
       };
     });
@@ -202,15 +198,8 @@ export const getIssueById = async (req, res, next) => {
       hasSupported = !!support;
     }
 
-    const issueObj = issue.toObject();
+    const issueObj = anonymizeComplaint(issue, req.user);
     const isStaffOrAdmin = req.user && req.user.role !== 'STUDENT';
-
-    if (issueObj.isAnonymous && !isStaffOrAdmin) {
-      issueObj.reporter = {
-        name: 'Anonymous Student',
-        role: 'STUDENT',
-      };
-    }
 
     // Hide internal notes from students
     if (!isStaffOrAdmin) {
@@ -228,6 +217,161 @@ export const getIssueById = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Persist a complaint, notify the reporter and the responsible officers, and write the audit event.
+ * Shared by the manual form, the legacy AI form and the conversational AI agent.
+ */
+export const persistComplaint = async ({
+  user,
+  ip = '',
+  title,
+  description,
+  assignedCategory,
+  assignedSubcategory,
+  location,
+  specificLocation,
+  parsedLocationDetails,
+  initialPriority,
+  isAnonymous,
+  finalImageUrl = '',
+  attachments = [],
+  routing,
+  aiClassification,
+}) => {
+  const anonymous = isAnonymous === true || isAnonymous === 'true';
+  // 3. Create Ticket with Unique Identifier
+  const initialStatus = routing.status || 'ASSIGNED';
+
+  const complaint = await Complaint.create({
+    title: title.trim(),
+    description: description.trim(),
+    category: assignedCategory,
+    subcategory: assignedSubcategory,
+    location: (location || parsedLocationDetails.roomOrArea || 'SEUSL Campus').trim(),
+    specificLocation: specificLocation ? specificLocation.trim() : '',
+    locationDetails: parsedLocationDetails,
+    university: 'South Eastern University of Sri Lanka',
+    faculty: user.faculty || 'Faculty of Technology',
+    priority: initialPriority,
+    isAnonymous: anonymous,
+    imageUrl: finalImageUrl,
+    attachments,
+    reporter: user.id,
+    // Anonymous reports never persist the student's identity; the reporter link is kept
+    // only so the owner can follow up and receive notifications.
+    studentRegistrationNumber: anonymous ? '' : user.registrationNumber || user.studentId || '',
+    studentName: anonymous ? '' : user.name,
+    status: initialStatus,
+    aiAnalysis: aiClassification,
+    routingDecision: routing,
+    statusHistory: [
+      {
+        previousStatus: '',
+        newStatus: initialStatus,
+        changedBy: anonymous ? undefined : user.id,
+        changedByName: anonymous ? 'Anonymous Student' : `${user.name} (Student)`,
+        note: `Complaint logged and verified route applied: ${routing.ruleApplied || 'Default Routing'}. Assigned to ${routing.assignedUnit}.`,
+        timestamp: new Date(),
+      },
+    ],
+  });
+
+  // 4. Create in-app notification for the submitting student
+  await Notification.create({
+    recipient: user.id,
+    type: 'issue_status',
+    title: `Complaint Submitted: ${complaint.ticketNumber}`,
+    message: `Your campus complaint "${complaint.title}" has been registered with ticket ${complaint.ticketNumber}. Assigned to: ${routing.assignedUnit}.`,
+    link: `/campuscare/${complaint._id}`,
+  });
+
+  // 5. Precise Role-Scoped Notification Dispatch:
+  // Only notify officers responsible for this specific complaint role / unit (e.g., LIBRARY_OFFICER, HOSTEL_WARDEN, etc.)
+  const targetRole = routing.targetRole;
+  let targetOfficerQuery = { accountStatus: 'active' };
+
+  if (targetRole) {
+    targetOfficerQuery.role = targetRole;
+
+    // Narrow down if faculty-specific
+    if (targetRole === 'FACULTY_OFFICER') {
+      const studentFaculty = user.faculty || parsedLocationDetails.facultyName;
+      if (studentFaculty) {
+        targetOfficerQuery.$or = [
+          { assignedFaculties: studentFaculty },
+          { faculty: studentFaculty },
+        ];
+      }
+    }
+
+    // Narrow down if hostel-specific
+    if (targetRole === 'HOSTEL_WARDEN') {
+      const hostelName = parsedLocationDetails.hostelName;
+      if (hostelName) {
+        targetOfficerQuery.$or = [
+          { assignedHostels: hostelName },
+          { assignedHostels: { $in: [hostelName] } },
+        ];
+      }
+    }
+  } else if (routing.assignedStaff) {
+    targetOfficerQuery._id = routing.assignedStaff;
+  } else {
+    // Fallback: match by unit name keywords
+    if (/library/i.test(routing.assignedUnit)) {
+      targetOfficerQuery.role = 'LIBRARY_OFFICER';
+    } else if (/hostel/i.test(routing.assignedUnit)) {
+      targetOfficerQuery.role = 'HOSTEL_WARDEN';
+    } else if (/cafeteria|canteen/i.test(routing.assignedUnit)) {
+      targetOfficerQuery.role = 'CANTEEN_MANAGER';
+    } else if (/faculty/i.test(routing.assignedUnit)) {
+      targetOfficerQuery.role = 'FACULTY_OFFICER';
+    } else {
+      targetOfficerQuery.role = 'MAINTENANCE_OFFICER';
+    }
+  }
+
+  // Retrieve the exact responsible officers for this domain
+  let officersToNotify = await User.find(targetOfficerQuery).select('_id name role email');
+
+  // If query with faculty/hostel sub-filter returned 0, fallback to any active officer of that exact role
+  if (officersToNotify.length === 0 && targetRole) {
+    officersToNotify = await User.find({ role: targetRole, accountStatus: 'active' }).select('_id name role email');
+  }
+
+  // Deliver notification strictly and exclusively to the targeted officer(s)
+  if (officersToNotify.length > 0) {
+    await Promise.all(
+      officersToNotify.map((officer) =>
+        Notification.create({
+          recipient: officer._id,
+          type: 'issue_assigned',
+          title: `New ${targetRole || routing.assignedUnit} Complaint: ${complaint.ticketNumber}`,
+          message: `New student complaint "${complaint.title}" filed at ${complaint.location} requires your review and resolution.`,
+          link: `/campuscare/${complaint._id}`,
+        })
+      )
+    );
+  }
+
+  await logAuditEvent({
+    action: 'COMPLAINT_CREATED',
+    user: anonymous ? { name: 'Anonymous Student', role: 'STUDENT' } : user,
+    targetEntity: 'Complaint',
+    targetId: complaint._id,
+    details: {
+      ticketNumber: complaint.ticketNumber,
+      category: complaint.category,
+      assignedUnit: routing.assignedUnit,
+      initialStatus,
+    },
+    ipAddress: ip,
+  });
+
+  return { complaint, routing, initialStatus };
+};
+
 
 // @desc    Create a new campus complaint report (with AI classification & verified routing)
 // @route   POST /api/issues
@@ -380,138 +524,28 @@ export const createIssue = async (req, res, next) => {
       });
     }
 
-    // 3. Create Ticket with Unique Identifier
-    const initialStatus = routing.status || 'ASSIGNED';
-    const initialPriority = priority || aiClassification?.suggestedPriority || 'Medium';
-
-    const complaint = await Complaint.create({
-      title: title.trim(),
-      description: description.trim(),
-      category: assignedCategory,
-      subcategory: assignedSubcategory,
-      location: (location || parsedLocationDetails.roomOrArea || 'SEUSL Campus').trim(),
-      specificLocation: specificLocation ? specificLocation.trim() : '',
-      locationDetails: parsedLocationDetails,
-      university: 'South Eastern University of Sri Lanka',
-      faculty: req.user.faculty || 'Faculty of Technology',
-      priority: initialPriority,
-      isAnonymous: Boolean(isAnonymous),
-      imageUrl: finalImageUrl,
-      reporter: req.user.id,
-      studentRegistrationNumber: req.user.registrationNumber || req.user.studentId || '',
-      studentName: req.user.name,
-      status: initialStatus,
-      aiAnalysis: aiClassification,
-      routingDecision: routing,
-      statusHistory: [
-        {
-          previousStatus: '',
-          newStatus: initialStatus,
-          changedBy: req.user.id,
-          changedByName: `${req.user.name} (Student)`,
-          note: `Complaint logged and verified route applied: ${routing.ruleApplied || 'Default Routing'}. Assigned to ${routing.assignedUnit}.`,
-          timestamp: new Date(),
-        },
-      ],
-    });
-
-    // 4. Create in-app notification for the submitting student
-    await Notification.create({
-      recipient: req.user.id,
-      type: 'issue_status',
-      title: `Complaint Submitted: ${complaint.ticketNumber}`,
-      message: `Your campus complaint "${complaint.title}" has been registered with ticket ${complaint.ticketNumber}. Assigned to: ${routing.assignedUnit}.`,
-      link: `/campuscare/${complaint._id}`,
-    });
-
-    // 5. Precise Role-Scoped Notification Dispatch:
-    // Only notify officers responsible for this specific complaint role / unit (e.g., LIBRARY_OFFICER, HOSTEL_WARDEN, etc.)
-    const targetRole = routing.targetRole;
-    let targetOfficerQuery = { accountStatus: 'active' };
-
-    if (targetRole) {
-      targetOfficerQuery.role = targetRole;
-
-      // Narrow down if faculty-specific
-      if (targetRole === 'FACULTY_OFFICER') {
-        const studentFaculty = req.user.faculty || parsedLocationDetails.facultyName;
-        if (studentFaculty) {
-          targetOfficerQuery.$or = [
-            { assignedFaculties: studentFaculty },
-            { faculty: studentFaculty },
-          ];
-        }
-      }
-
-      // Narrow down if hostel-specific
-      if (targetRole === 'HOSTEL_WARDEN') {
-        const hostelName = parsedLocationDetails.hostelName;
-        if (hostelName) {
-          targetOfficerQuery.$or = [
-            { assignedHostels: hostelName },
-            { assignedHostels: { $in: [hostelName] } },
-          ];
-        }
-      }
-    } else if (routing.assignedStaff) {
-      targetOfficerQuery._id = routing.assignedStaff;
-    } else {
-      // Fallback: match by unit name keywords
-      if (/library/i.test(routing.assignedUnit)) {
-        targetOfficerQuery.role = 'LIBRARY_OFFICER';
-      } else if (/hostel/i.test(routing.assignedUnit)) {
-        targetOfficerQuery.role = 'HOSTEL_WARDEN';
-      } else if (/cafeteria|canteen/i.test(routing.assignedUnit)) {
-        targetOfficerQuery.role = 'CANTEEN_MANAGER';
-      } else if (/faculty/i.test(routing.assignedUnit)) {
-        targetOfficerQuery.role = 'FACULTY_OFFICER';
-      } else {
-        targetOfficerQuery.role = 'MAINTENANCE_OFFICER';
-      }
-    }
-
-    // Retrieve the exact responsible officers for this domain
-    let officersToNotify = await User.find(targetOfficerQuery).select('_id name role email');
-
-    // If query with faculty/hostel sub-filter returned 0, fallback to any active officer of that exact role
-    if (officersToNotify.length === 0 && targetRole) {
-      officersToNotify = await User.find({ role: targetRole, accountStatus: 'active' }).select('_id name role email');
-    }
-
-    // Deliver notification strictly and exclusively to the targeted officer(s)
-    if (officersToNotify.length > 0) {
-      await Promise.all(
-        officersToNotify.map((officer) =>
-          Notification.create({
-            recipient: officer._id,
-            type: 'issue_assigned',
-            title: `New ${targetRole || routing.assignedUnit} Complaint: ${complaint.ticketNumber}`,
-            message: `New student complaint "${complaint.title}" filed at ${complaint.location} requires your review and resolution.`,
-            link: `/campuscare/${complaint._id}`,
-          })
-        )
-      );
-    }
-
-    await logAuditEvent({
-      action: 'COMPLAINT_CREATED',
+    const { complaint } = await persistComplaint({
       user: req.user,
-      targetEntity: 'Complaint',
-      targetId: complaint._id,
-      details: {
-        ticketNumber: complaint.ticketNumber,
-        category: complaint.category,
-        assignedUnit: routing.assignedUnit,
-        initialStatus,
-      },
-      ipAddress: req.ip,
+      ip: req.ip,
+      title,
+      description,
+      assignedCategory,
+      assignedSubcategory,
+      location,
+      specificLocation,
+      parsedLocationDetails,
+      initialPriority: priority || aiClassification?.suggestedPriority || 'Medium',
+      isAnonymous,
+      finalImageUrl,
+      routing,
+      aiClassification,
     });
 
     res.status(201).json({
       success: true,
       message: `Campus complaint submitted successfully. Ticket #${complaint.ticketNumber}`,
       ticketNumber: complaint.ticketNumber,
-      data: complaint,
+      data: anonymizeComplaint(complaint, req.user),
     });
   } catch (error) {
     next(error);
@@ -592,7 +626,7 @@ export const updateIssueStatus = async (req, res, next) => {
     res.json({
       success: true,
       message: `Complaint ${complaint.ticketNumber} status updated to ${status}.`,
-      data: complaint,
+      data: anonymizeComplaint(complaint, req.user),
     });
   } catch (error) {
     next(error);
@@ -734,7 +768,7 @@ export const answerClarification = async (req, res, next) => {
     res.json({
       success: true,
       message: 'Clarification answer submitted successfully. Complaint moved back to IN_PROGRESS.',
-      data: complaint,
+      data: anonymizeComplaint(complaint, req.user),
     });
   } catch (error) {
     next(error);

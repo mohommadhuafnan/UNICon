@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { AgentChat } from './AgentChat';
 import api from '../../api/client';
 import {
   ShieldAlert,
@@ -243,7 +244,13 @@ export const ReportIssue = () => {
         </Link>
       </div>
 
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-200 shadow-sm space-y-6">
+      <div
+        className={
+          submissionMode === 'agent'
+            ? 'space-y-5'
+            : 'bg-white rounded-3xl p-6 sm:p-8 border border-gray-200 shadow-sm space-y-6'
+        }
+      >
         <div>
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-orange-100 text-brand-600 flex items-center justify-center font-bold">
@@ -289,6 +296,11 @@ export const ReportIssue = () => {
           </button>
         </div>
 
+        {/* AI AGENT: conversational reporting */}
+        {submissionMode === 'agent' && <AgentChat />}
+
+        {submissionMode === 'manual' && (
+          <>
         {/* MODE BANNER */}
         {submissionMode === 'agent' ? (
           <div className="p-4 rounded-2xl bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 border border-orange-200 flex items-start gap-3">
@@ -538,6 +550,8 @@ export const ReportIssue = () => {
             )}
           </button>
         </form>
+          </>
+        )}
       </div>
 
       {/* SUMMARY CONFIRMATION MODAL */}

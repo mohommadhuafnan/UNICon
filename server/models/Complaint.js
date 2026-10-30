@@ -151,6 +151,8 @@ const complaintSchema = new mongoose.Schema(
       assignedUnit: { type: String, default: 'Awaiting Assignment' },
       assignedStaff: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       assignedStaffName: { type: String, default: '' },
+      targetRole: { type: String, default: '' },
+      reason: { type: String, default: '' },
       assignedAt: { type: Date },
       isVerifiedAssignment: { type: Boolean, default: false },
     },

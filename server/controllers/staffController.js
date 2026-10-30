@@ -1,3 +1,4 @@
+import { anonymizeComplaint } from '../utils/anonymity.js';
 import Complaint from '../models/Complaint.js';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
@@ -185,7 +186,7 @@ export const getStaffComplaints = async (req, res, next) => {
         resolved: resolvedCount,
         overdue: overdueCount,
       },
-      data: complaints,
+      data: complaints.map((c) => anonymizeComplaint(c, req.user)),
     });
   } catch (error) {
     next(error);
@@ -238,7 +239,7 @@ export const acknowledgeComplaint = async (req, res, next) => {
     res.json({
       success: true,
       message: `Complaint ${complaint.ticketNumber} acknowledged successfully.`,
-      data: complaint,
+      data: anonymizeComplaint(complaint, req.user),
     });
   } catch (error) {
     next(error);
@@ -294,7 +295,7 @@ export const requestClarification = async (req, res, next) => {
     res.json({
       success: true,
       message: 'Clarification request sent to student.',
-      data: complaint,
+      data: anonymizeComplaint(complaint, req.user),
     });
   } catch (error) {
     next(error);
@@ -365,7 +366,7 @@ export const reassignComplaint = async (req, res, next) => {
     res.json({
       success: true,
       message: `Complaint reassigned to ${newUnit}.`,
-      data: complaint,
+      data: anonymizeComplaint(complaint, req.user),
     });
   } catch (error) {
     next(error);
@@ -411,7 +412,7 @@ export const escalateComplaint = async (req, res, next) => {
     res.json({
       success: true,
       message: `Complaint ${complaint.ticketNumber} escalated to University Administrator Review.`,
-      data: complaint,
+      data: anonymizeComplaint(complaint, req.user),
     });
   } catch (error) {
     next(error);
